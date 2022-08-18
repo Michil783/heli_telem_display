@@ -84,7 +84,7 @@ collectgarbage()
 
 local _version = "1.05"
 local _appName = ""
-local debugOn = false
+local debugOn = true
 
 --
 local sensorsAvailable = {}
@@ -183,6 +183,7 @@ local activateTelemetryMinMax
 local voltagePerCell = 0.0
 local voltagePerCellAveraged = 0.0
 local voltagePerCellAtStartup = 0.0
+local voltageSensorValue = 0.0
 local batteryCapacityPercentAtStartup = 0.0
 local batteryCapacityUsedAtStartup = 0.0
 local effectivePercentageAtStartUp = 0.0
@@ -943,7 +944,7 @@ local function trackTimeAndResetValues()
 	currentTime = system.getTimeCounter() * 1E-3
 	
 	local sensorsRx = system.getTxTelemetry()
-	local voltageSensorValue
+	--local voltageSensorValue
 	
 	
 	
@@ -1028,6 +1029,8 @@ local function trackTimeAndResetValues()
 		
 		if (voltageSensorValue) then
 			voltagePerCellAtStartup = (voltageSensorValue * (correctionFactor/1000))/ lipoCellCount
+			print( string.format("voltageSensorValue: %4.2f",voltageSensorValue) )
+			print( string.format("voltagePerCellAtStartup: %4.2f", voltagePerCellAtStartup) )
 			batteryCapacityPercentAtStartup = voltageAsAPercentage(voltagePerCellAtStartup)
 			batteryCapacityUsedAtStartup = lipoCapacity - (lipoCapacity * (batteryCapacityPercentAtStartup/100))
 			effectivePercentageAtStartUp = (1-(batteryCapacityUsedAtStartup / effectiveLipoCapacity))*100
@@ -1185,7 +1188,7 @@ local function updateTelemetrySensors()
 	local aileronSensorTable
 	local rudderSensorTable
 	
-	local voltageSensorValue
+	--local voltageSensorValue
 	
 	if(voltageSensorID == 999) then
 	
@@ -1486,18 +1489,18 @@ local function printForm()
 	end
 	
 	lcd.drawText(125,0,"Estimate?="..tostring(estimateUsedLipoBoolean),FONT_MINI)
-	lcd.drawText(125,10,string.format("VInitial=%4.2f",voltagePerCellAtStartup),FONT_MINI)
+	lcd.drawText(125,10,string.format("VInitial=%4.2f",voltageSensorValue),FONT_MINI)
+	lcd.drawText(125,20,string.format("VValue=%4.2f",voltagePerCellAtStartup),FONT_MINI)
 	
-	lcd.drawText(125,20,string.format("Initial=%i%%",batteryCapacityPercentAtStartup),FONT_MINI)
-	lcd.drawText(125,30,string.format("InitialmAh=%i",batteryCapacityUsedAtStartup),FONT_MINI)
+	lcd.drawText(125,30,string.format("Initial=%i%%",batteryCapacityPercentAtStartup),FONT_MINI)
+	lcd.drawText(125,40,string.format("InitialmAh=%i",batteryCapacityUsedAtStartup),FONT_MINI)
 	
-	lcd.drawText(125,40,string.format("Capacity=%i",lipoCapacity),FONT_MINI)
-	lcd.drawText(125,50,string.format("CapEffctv=%i",effectiveLipoCapacity),FONT_MINI)
-	lcd.drawText(125,60,string.format("CapUsed=%5.2f%%",batteryCapacityUsed),FONT_MINI)
-	lcd.drawText(125,70,string.format("TotalUsed=%6.1f",batteryCapacityUsedTotal),FONT_MINI)
-	lcd.drawText(125,80,string.format("TotalPerc=%5.2f%%",batteryPercentage),FONT_MINI)
-	lcd.drawText(125,90,string.format("TotalPerc=%2.0f%%",batteryPercentage),FONT_MINI)
-	lcd.drawText(125,100,string.format("TotalPerc=%i%%",batteryPercentage),FONT_MINI)
+	lcd.drawText(125,50,string.format("Capacity=%i",lipoCapacity),FONT_MINI)
+	lcd.drawText(125,60,string.format("CapEffctv=%i",effectiveLipoCapacity),FONT_MINI)
+	lcd.drawText(125,70,string.format("CapUsed=%5.2f%%",batteryCapacityUsed),FONT_MINI)
+	lcd.drawText(125,80,string.format("TotalUsed=%6.1f",batteryCapacityUsedTotal),FONT_MINI)
+	lcd.drawText(125,90,string.format("TotalPerc=%5.2f%%",batteryPercentage),FONT_MINI)
+	lcd.drawText(125,100,string.format("TotalPerc=%2.0f%%",batteryPercentage),FONT_MINI)
 	
 	lcd.drawText(215,0,string.format("Cell=%4.2f",voltagePerCell),FONT_MINI)
 	lcd.drawText(215,10,string.format("Avg=%4.2f",voltagePerCellAveraged),FONT_MINI)
@@ -2003,7 +2006,7 @@ local function printTelemetryWindow()
 		local escCurrentString = string.format("%3.1f",escCurrent)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escCurrentString)-45,panel_02_R_Y,escCurrentString,FONT_BIG)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"A")-34,panel_02_R_Y+5,"A",FONT_MINI)
-		local escCurrentMaxString = string.format("%iA",escCurrentMax)
+		local escCurrentMaxString = string.format("%3iA",escCurrentMax)
 		-- lcd.setColor(max_r,max_g,max_b)
 		if (escCurrentMax == -1.0) then
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- A")-5,panel_02_R_Y+5,"--- A",FONT_MINI)
@@ -2043,22 +2046,6 @@ local function printTelemetryWindow()
 	end
 	lcd.setColor(base_r,base_g,base_b)
 
---[[	
-	lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18+18,"Vibrations",FONT_MINI)
-	local vibrationsString = string.format("%i",vibrations)
-	lcd.drawText(panel_02_R_X+(panel_02_R_Width-lcd.getTextWidth(FONT_BIG,vibrationsString))-45,panel_02_R_Y+0+18+18+18,vibrationsString,FONT_BIG)
-	lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"%")-34,panel_02_R_Y+5+18+18+18,"%",FONT_MINI)
-
-	local vibrationsMaxString = string.format("%i%%",vibrationsMax)
-	-- lcd.setColor(max_r,max_g,max_b)
-	if (vibrationsMax == -1.0) then
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- %")-3,panel_02_R_Y+5+18+18+18,"--- %",FONT_MINI)
-	else
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,vibrationsMaxString)-3,panel_02_R_Y+5+18+18+18,vibrationsMaxString,FONT_MINI)
-	end
-	lcd.setColor(base_r,base_g,base_b)
-]]--
-
 	if( maltiSensorParam > 0 ) then
 		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18+18,trans21.actHeight,FONT_MINI)
 		local hightString = string.format("%i",hight)
@@ -2089,8 +2076,12 @@ local function printTelemetryWindow()
 		
 	if( voltageSensorParam > 0 ) then
 		local voltagePerCellAveragedString = string.format("%4.2f",voltagePerCellAveraged)
-		lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltagePerCellAveragedString))*0.5,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MAXI,voltagePerCellAveragedString)-8,voltagePerCellAveragedString,FONT_MAXI)
-		lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltagePerCellAveragedString))*0.5 + 68,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_BIG,"V")-17,"V",FONT_BIG)
+		local voltageSensorValueString = string.format("%02.1f",voltageSensorValue)
+
+		--lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltagePerCellAveragedString))*0.5,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MAXI,voltagePerCellAveragedString)-8,voltagePerCellAveragedString,FONT_MAXI)
+		--lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltagePerCellAveragedString))*0.5 + 68,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_BIG,"V")-17,"V",FONT_BIG)
+		lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltageSensorValueString))*0.5,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MAXI,voltageSensorValueString)-8,voltageSensorValueString,FONT_MAXI)
+		lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltageSensorValueString))*0.5 + 68,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_BIG,"V")-17,"V",FONT_BIG)
 		
 		lcd.drawText(panel_03_R_X+4,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MINI,trans21.cell)-9,trans21.cell,FONT_MINI)
 		lcd.drawText(panel_03_R_X+4,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MINI,trans21.cellVolt)+2,trans21.cellVolt,FONT_MINI)
