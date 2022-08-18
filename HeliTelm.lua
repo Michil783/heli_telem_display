@@ -2,71 +2,18 @@
 	
 	Heli Telem. Display - Full Screen Telemetry Display for Helicopters
 	
-    By Nick Pedersen (username "nickthenorse" on RCGroups.com and HeliFreak.com).
+    By Michael Leopoldseder based on Nick Pedersen.
 	
 	v1.00 - 2021-08-14 - Initial release
 	v1.01 - 2021-08-15 - Bug fix
 	v1.02 - 2021-08-15 - Bug fix
-	
-	Thanks for trying out my Jeti Lua app! This is my attempt at learning Lua as well as 
-	putting together an app for how I specifically wanted to display the telemetry for my
-	FBL-based helicopters. It is based on my use of the Brain2 FBL, but will work well with
-	any modern FBL controller. The one caveat is that it is very much dependent on having
-	current and capacity sensing from the ESC.
-	
-	It is a full screen telemetry window, and is hardcoded to display:
-	
-		- A flight timer (counts upwards only).
 
-		- Rx telemetry: Instantaneous and mininum values for Q, A1, A2, and Rx voltage 
-		  (max/min recorded for voltage). Signal levels also shown graphically.
-		  
-		- Maximum recorded FBL rotation rates for the elevator, aileron and rudder channels 
-		  for the flight.
-		  
-		- Headspeed (instantaneous and maximum).
+    Michael Leopoldseder changes starts here
 
-		- Lipo capacity used, in both percentage and in mAh. Capacity used also shown graphically
-		  with a battery symbol. Total flight capacity of the lipo is assumed to be 80% of the 
-		  nominal lipo capacity (ie, 80% of a 3700 mAh lipo = 2960 mAh).
-		  
-		- Custom selectable voice file/alarm levels for battery capacity used during the flight.
+	v1.03 - 2022-08-13 - changes some colors and telemetry sensors 
+	v1.04 - 2022-08-17 - adding flight counter 
+	v1.05 - 2022-08-18 - changing Telemetry window name and adding language support
 
-		- Custom selectable estimation of used battery capacity based on voltage, if the Rx is
-		  powered up with a lipo that is not fully charged. Can also warn via audible voice file.
-		  
-		- The instantaneous and maximum values for ESC current, ESC temperature, ESC 
-		  throttle/power, and FBL vibration level.
-		  
-		- Main flight pack voltage per cell (just the total lipo voltage divided by the
-		  number of cells), as well as the min and max values recorded during the flight.
-		  Min and max voltages shown graphically.
-		  
-		- Custom defineable voltage correction factor/multiplier - most ESCs do not allow you to tweak 
-		  the voltage reading in case it is a few percent inaccurate.
-		  
-		- This main flight pack voltage per cell is also recorded as a custom variable in the
-		  Jeti flight logs.
-		  
-		- Allows user to define a time delay to allow for FBL initialisation. Typically need ca. 10 seconds.
-
-		- Allows user to specify number of samples to average voltage readings.
-
-		- The app will detect when a new lipo is plugged in and automatically reset the flight timer and telemetry values,
-		  though this can also be done manually by defining the appropriate switches in the menu.
-		  
-	This is purely for my own hobbyist and non-commercial use.	No liability or responsibility 
-	is assumed for your own use! Feel free to use this code in any way you see fit to modify 
-	and/or personalise the telemetry that is being displayed, or as a way to learn lua for yourself.
-	
-	Also: this is my first attempt at a lua app for Jeti. I can't claim it is particularly
-	efficiently coded, and is in no way optimised for optimal memory usage. But it works :)
-	
-	Code heavily inspired by JETI model s.r.o.'s own lua application samples, as well as:
-
-		- Tero excellent collection of lua "Jeti Tools" https://www.rc-thoughts.com/
-		- Thorn's "Display" app from https://www.jetiforum.de/ and https://www.thorn-klaus-jeti.de
-		- Dit71's "dbdis" app from https://www.jetiforum.de/ and https://github.com/ribid1/dbdis
 
 --------------------------------------------------------------------------------------------]]
 
@@ -77,6 +24,8 @@
 
 collectgarbage()
 
+local _version = "1.05"
+local _appName = ""
 local debugOn = false
 
 --
@@ -92,6 +41,9 @@ local vibrationsSensorID, vibrationsSensorParam
 local elevatorSensorID, elevatorSensorParam
 local aileronSensorID, aileronSensorParam
 local rudderSensorID, rudderSensorParam
+local maltiSensorID, maltiSensorParam
+
+local flightCount, actTime, countSet = 0, 1, 0
 
 local lipoCellCount
 local lipoCapacity
@@ -142,6 +94,7 @@ local escCurrentMax = -1.0
 local escTempMax = -1
 local escThrottleMax = -1
 local vibrationsMax = -1
+local hightMax = -1
 local rpmMax = -1
 local elevatorRateMin = 1e6
 local elevatorRateMax = -1e6
@@ -181,6 +134,7 @@ local escCurrent = 0.0
 local escTemp = 0
 local escThrottle = 0
 local vibrations = 0
+local hight = 0
 local rpm = 0
 local batteryCapacityUsed = 0
 local batteryCapacityUsedTotal = 0
@@ -212,6 +166,14 @@ local rx_1_RSSI_A2 = 0
 
 --------------------------------------------------------------------------------------------
 
+local function setLanguage()
+    local lng=system.getLocale()
+    local file = io.readall("Apps/Lang/HeliTelm.jsn")
+    local obj = json.decode(file)
+    if(obj) then
+        trans21 = obj[lng] or obj[obj.default]
+    end
+end
 
 
 --------------------------------------------------------------------------------------------
@@ -319,6 +281,16 @@ local function vibrationsSensorChanged(value)
 	system.pSave("vibrationsSensorParam",vibrationsSensorParam)
 	if (debugOn == true) then
 		print("Vibrations sensor",vibrationsSensorID,vibrationsSensorParam)
+	end
+end
+
+local function maltiSensorChanged(value)
+	maltiSensorID = sensorsAvailable[value].id
+	maltiSensorParam = sensorsAvailable[value].param
+	system.pSave("maltiSensorID",maltiSensorID)
+	system.pSave("maltiSensorParam",maltiSensorParam)
+	if (debugOn == true) then
+		print("Malti sensor",maltiSensorID,maltiSensorParam)
 	end
 end
 
@@ -580,6 +552,18 @@ local function alarmVoltageLevelOneChanged(value)
 	end
 end
 
+local function actTimeChanged(value)
+    local pSave = system.pSave
+	actTime = value
+	pSave("actTime", value)
+end
+
+local function flightCountChanged(value)
+    local pSave = system.pSave
+	flightCount = value
+	pSave("flightCount", value)
+end
+
 --------------------------------------------------------------------------------------------
 
 
@@ -600,6 +584,7 @@ local function initForm(formID)
 	local throttleCurrentIndex = -1
 	local rpmCurrentIndex = -1
 	local vibrationsCurrentIndex = -1
+	local maltiCurrentIndex = -1
 	local elevatorCurrentIndex = -1
 	local aileronCurrentIndex = -1
 	local rudderCurrentIndex = -1
@@ -652,6 +637,9 @@ local function initForm(formID)
 			if(sensor.id == vibrationsSensorID and sensor.param == vibrationsSensorParam) then
 				vibrationsCurrentIndex = #sensorsAvailable
 			end
+			if(sensor.id == maltiSensorID and sensor.param == maltiSensorParam) then
+				maltiCurrentIndex = #sensorsAvailable
+			end
 			if(sensor.id == elevatorSensorID and sensor.param == elevatorSensorParam) then
 				elevatorCurrentIndex = #sensorsAvailable
 			end
@@ -665,137 +653,141 @@ local function initForm(formID)
 	end
 	
 	form.addRow(2)
-	form.addLabel({label="Select telemetry sensors",font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=200})
+	form.addLabel({label=trans21.sensors,font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=240})
 	
 	form.addRow(2)
-	form.addLabel({label="ESC Voltage (V)",font=FONT_NORMAL,width=160})
+	form.addLabel({label=trans21.voltage,font=FONT_NORMAL,width=170})
 	form.addSelectbox(selectionList,voltageCurrentIndex,true,voltageSensorChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="ESC Lipo Used (mAh)",font=FONT_NORMAL,width=160})
+	form.addLabel({label=trans21.capacity,font=FONT_NORMAL,width=170})
 	form.addSelectbox(selectionList,capacityCurrentIndex,true,capacitySensorChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="ESC Current (A)",font=FONT_NORMAL,width=160})
+	form.addLabel({label=trans21.current,font=FONT_NORMAL,width=170})
 	form.addSelectbox(selectionList,currentCurrentIndex,true,currentSensorChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="ESC Temperature (° C)",font=FONT_NORMAL,width=160})
+	form.addLabel({label=trans21.temp,font=FONT_NORMAL,width=170})
 	form.addSelectbox(selectionList,temperatureCurrentIndex,true,temperatureSensorChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="ESC Throttle (%)",font=FONT_NORMAL,width=160})
+	form.addLabel({label=trans21.throttle,font=FONT_NORMAL,width=170})
 	form.addSelectbox(selectionList,throttleCurrentIndex,true,throttleSensorChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="ESC Headspeed (RPM)",font=FONT_NORMAL,width=160})
+	form.addLabel({label=trans21.rpm,font=FONT_NORMAL,width=170})
 	form.addSelectbox(selectionList,rpmCurrentIndex,true,rpmSensorChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="FBL Vibrations (%)",font=FONT_NORMAL,width=160})
+	form.addLabel({label=trans21.height,font=FONT_NORMAL,width=170})
+	form.addSelectbox(selectionList,maltiCurrentIndex,true,maltiSensorChanged)
+	
+	form.addRow(2)
+	form.addLabel({label=trans21.vibrations,font=FONT_NORMAL,width=170})
 	form.addSelectbox(selectionList,vibrationsCurrentIndex,true,vibrationsSensorChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="FBL Elevator Rate (°/s)",font=FONT_NORMAL,width=160})
+	form.addLabel({label=trans21.elevator,font=FONT_NORMAL,width=170})
 	form.addSelectbox(selectionList,elevatorCurrentIndex,true,elevatorSensorChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="FBL Aileron Rate (°/s)",font=FONT_NORMAL,width=160})
+	form.addLabel({label=trans21.aileron,font=FONT_NORMAL,width=170})
 	form.addSelectbox(selectionList,aileronCurrentIndex,true,aileronSensorChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="FBL Rudder Rate (°/s)",font=FONT_NORMAL,width=160})
+	form.addLabel({label=trans21.rudder,font=FONT_NORMAL,width=170})
 	form.addSelectbox(selectionList,rudderCurrentIndex,true,rudderSensorChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="Define Options",font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=200})
+	form.addLabel({label=trans21.options,font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=200})
 	
 	form.addRow(2)
-	form.addLabel({label="Lipo Cell Count",font=FONT_NORMAL,width=200})
+	form.addLabel({label=trans21.cellCount,font=FONT_NORMAL,width=200})
 	form.addIntbox(lipoCellCount,1,99,1,0,1,lipoCellCountChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="Lipo Nominal Capacity (mAh)",font=FONT_NORMAL,width=210})
+	form.addLabel({label=trans21.nominalCapacity,font=FONT_NORMAL,width=210})
 	form.addIntbox(lipoCapacity,0,10000,0,0,50,lipoCapacityChanged)
 		
 	form.addRow(2)
-	form.addLabel({label="Voltage Correction Factor",font=FONT_NORMAL,width=200})
+	form.addLabel({label=trans21.corrFactor,font=FONT_NORMAL,width=200})
 	form.addIntbox(correctionFactor,1,2000,1000,3,1,correctionFactorChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="Estimate Capacity of Used Lipo?",font=FONT_NORMAL,width=230})
+	form.addLabel({label=trans21.usedLipo,font=FONT_NORMAL,width=230})
 	checkboxIndex1 = form.addCheckbox(estimateUsedLipoBoolean,estimateUsedLipoBooleanChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="		Voltage Threshold (V)",font=FONT_NORMAL,width=230})
+	form.addLabel({label=trans21.voltageThreshold,font=FONT_NORMAL,width=230})
 	form.addIntbox(voltageThresholdUsedLipo,0,420,330,2,1,voltageThresholdUsedLipoChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="		Voice File",font=FONT_NORMAL,width=150})
+	form.addLabel({label=trans21.usedLipoAnnouncement,font=FONT_NORMAL,width=160})
 	form.addAudioFilebox(alarmUsedLipoDetectedFile,alarmUsedLipoDetectedFileChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="FBL Initialization Time Delay (s)",font=FONT_NORMAL,width=230})
+	form.addLabel({label=trans21.fblInitDelay,font=FONT_NORMAL,width=230})
 	form.addIntbox(timeDelay,0,100,0,0,1,timeDelayChanged)
 
 	form.addRow(2)
-	form.addLabel({label="Samples for Voltage Averaging (#)",font=FONT_NORMAL,width=240})
+	form.addLabel({label=trans21.samples,font=FONT_NORMAL,width=240})
 	form.addIntbox(averagingWindowCellVoltage,1,99,1,0,1,averagingWindowCellVoltageChanged)
 	
 	form.addRow(1)
-	form.addLabel({label="		(If changed, please refresh (F2) on",font=FONT_NORMAL})
+	form.addLabel({label=trans21.hint1,font=FONT_NORMAL})
 	form.addRow(1)
-	form.addLabel({label="		'User Applications' screen)",font=FONT_NORMAL})
+	form.addLabel({label=trans21.hint2,font=FONT_NORMAL})
 	
 	form.addRow(2)
-	form.addLabel({label="Define Battery Announcements",font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=250})
+	form.addLabel({label=trans21.batteryAnnouncements,font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=250})
 	
 	form.addRow(2)
-	form.addLabel({label="Battery Level 1 (%)",font=FONT_NORMAL,width=225})
+	form.addLabel({label=trans21.batteryLevel1,font=FONT_NORMAL,width=225})
 	form.addIntbox(alarmCapacityLevelOne,0,100,1,0,1,alarmCapacityLevelOneChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="		Voice File",font=FONT_NORMAL,width=150})
+	form.addLabel({label=trans21.batteryLevel1Announcement,font=FONT_NORMAL,width=150})
 	form.addAudioFilebox(alarmCapacityLevelOneFile,alarmCapacityLevelOneFileChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="Battery Level 2 (%)",font=FONT_NORMAL,width=225})
+	form.addLabel({label=trans21.batteryLevel2,font=FONT_NORMAL,width=225})
 	form.addIntbox(alarmCapacityLevelTwo,0,100,1,0,1,alarmCapacityLevelTwoChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="		Voice File",font=FONT_NORMAL,width=150})
+	form.addLabel({label=trans21.batteryLevel2Announcement,font=FONT_NORMAL,width=150})
 	form.addAudioFilebox(alarmCapacityLevelTwoFile,alarmCapacityLevelTwoFileChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="Battery Level 3 (%)",font=FONT_NORMAL,width=225})
+	form.addLabel({label=trans21.batteryLevel3,font=FONT_NORMAL,width=225})
 	form.addIntbox(alarmCapacityLevelThree,0,100,1,0,1,alarmCapacityLevelThreeChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="		Voice File",font=FONT_NORMAL,width=150})
+	form.addLabel({label=trans21.batteryLevel3Announcement,font=FONT_NORMAL,width=150})
 	form.addAudioFilebox(alarmCapacityLevelThreeFile,alarmCapacityLevelThreeFileChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="Battery Level 4 (%)",font=FONT_NORMAL,width=225})
+	form.addLabel({label=trans21.batteryLevel4,font=FONT_NORMAL,width=225})
 	form.addIntbox(alarmCapacityLevelFour,0,100,1,0,1,alarmCapacityLevelFourChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="		Voice File",font=FONT_NORMAL,width=150})
+	form.addLabel({label=trans21.batteryLevel4Announcement,font=FONT_NORMAL,width=150})
 	form.addAudioFilebox(alarmCapacityLevelFourFile,alarmCapacityLevelFourFileChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="Battery Level 5 (%)",font=FONT_NORMAL,width=225})
+	form.addLabel({label=trans21.batteryLevel5,font=FONT_NORMAL,width=225})
 	form.addIntbox(alarmCapacityLevelFive,0,100,1,0,1,alarmCapacityLevelFiveChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="		Voice File",font=FONT_NORMAL,width=150})
+	form.addLabel({label=trans21.batteryLevel5Announcement,font=FONT_NORMAL,width=150})
 	form.addAudioFilebox(alarmCapacityLevelFiveFile,alarmCapacityLevelFiveFileChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="Battery Level 6 (%)",font=FONT_NORMAL,width=225})
+	form.addLabel({label=trans21.batteryLevel6,font=FONT_NORMAL,width=225})
 	form.addIntbox(alarmCapacityLevelSix,0,100,1,0,1,alarmCapacityLevelSixChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="		Voice File",font=FONT_NORMAL,width=150})
+	form.addLabel({label=trans21.batteryLevel6Announcement,font=FONT_NORMAL,width=150})
 	form.addAudioFilebox(alarmCapacityLevelSixFile,alarmCapacityLevelSixFileChanged)
 	
 	-- if lowVoltageChirp == 1 then
@@ -805,31 +797,38 @@ local function initForm(formID)
 	-- end
 	
 	form.addRow(2)
-	form.addLabel({label="Chirp at Low Lipo Cell Voltage?",font=FONT_NORMAL,width=230})
+	form.addLabel({label=trans21.chirp,font=FONT_NORMAL,width=230})
 	checkboxIndex2 = form.addCheckbox(lowVoltageChirpBoolean,lowVoltageChirpBooleanChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="		Low Voltage Threshold (V)",font=FONT_NORMAL,width=220})
+	form.addLabel({label=trans21.lowThreshold,font=FONT_NORMAL,width=220})
 	form.addIntbox(alarmVoltageLevelOne,0,420,330,2,5,alarmVoltageLevelOneChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="Define Switches",font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=200})
+	form.addLabel({label=trans21.switches,font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=200})
 	
 	form.addRow(2)
-	form.addLabel({label="Start Flight Timer Switch",font=FONT_NORMAL,width=200})
+	form.addLabel({label=trans21.startTimer,font=FONT_NORMAL,width=200})
 	form.addInputbox(switchStartTimer,true,switchStartTimerChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="Reset Flight Timer Switch",font=FONT_NORMAL,width=200})
+	form.addLabel({label=trans21.resetTimer,font=FONT_NORMAL,width=200})
 	form.addInputbox(switchResetTimer,true,switchResetTimerChanged)
 	
 	form.addRow(2)
-	form.addLabel({label="Activate Telem. Max/Min Switch",font=FONT_NORMAL,width=230})
+	form.addLabel({label=trans21.activateMaxMin,font=FONT_NORMAL,width=230})
 	form.addInputbox(switchActivateTelemetryMinMax,true,switchActivateTelemetryMinMaxChanged)
-	
+
 	form.addRow(2)
-	form.addLabel({label="Reset Telem. Max/Min Switch",font=FONT_NORMAL,width=225})
-	form.addInputbox(switchResetTelemetryMinMax,true,switchResetTelemetryMinMaxChanged)
+	form.addLabel({label=trans21.flightCounter,font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=250})
+	
+    form.addRow(2)
+    form.addLabel({label=trans21.actTime, width=220})
+    form.addIntbox(actTime, 1, 600, 0, 0, 1, actTimeChanged)
+
+	form.addRow(2)
+	form.addLabel({label=trans21.flightCount,font=FONT_NORMAL,width=220})
+    form.addIntbox(flightCount, -0, 10000, 0, 0, 1, flightCountChanged)
 
 	
 	--collectgarbage()
@@ -852,6 +851,7 @@ local function resetTelemetryValues()
 	escTempMax = -1
 	escThrottleMax = -1
 	vibrationsMax = -1
+	hightMax = -1
 	rpmMax = -1
 	elevatorRateMin = 1e6
 	elevatorRateMax = -1e6
@@ -930,6 +930,7 @@ local function trackTimeAndResetValues()
 		escTemp = 0
 		escThrottle = 0
 		vibrations = 0
+		hight = 0
 		rpm = 0.0
 	end
 	
@@ -1012,9 +1013,16 @@ local function trackTimeAndResetValues()
 	else
 		timeCounter = timeCounter
 	end
+
+    if (timeCounter >= actTime) and countSet == 0 then
+        flightCount = flightCount + 1
+        system.pSave("flightCount", flightCount)
+        countSet = 1
+    end
 	
 	if (resetTimer == 1) then
 		timeCounter = 0
+	    countSet = 0
 	end	
 	
 	--local hh = (tenths // (60 * 60)) % 24
@@ -1103,6 +1111,7 @@ local function updateTelemetrySensors()
 	local temperatureSensorTable
 	local throttleSensorTable
 	local vibrationsSensorTable
+	local maltiSensorTable
 	local rpmSensorTable
 	local elevatorSensorTable
 	local aileronSensorTable
@@ -1154,6 +1163,11 @@ local function updateTelemetrySensors()
 	vibrationsSensorTable = system.getSensorByID(vibrationsSensorID,vibrationsSensorParam)
 	if (vibrationsSensorTable) then
 		vibrations = vibrationsSensorTable.value
+	end
+	
+	maltiSensorTable = system.getSensorByID(maltiSensorID,maltiSensorParam)
+	if (maltiSensorTable) then
+		hight = maltiSensorTable.value
 	end
 	
 	rpmSensorTable = system.getSensorByID(rpmSensorID,rpmSensorParam)
@@ -1222,6 +1236,10 @@ local function updateTelemetrySensors()
 	
 	if (telemetryActive and activateTelemetryMinMax == 1 and vibrations > vibrationsMax) then
 		vibrationsMax = vibrations
+	end
+	
+	if (telemetryActive and activateTelemetryMinMax == 1 and hight > hightMax) then
+		hightMax = hight
 	end
 	
 	if (telemetryActive and activateTelemetryMinMax == 1 and rpm > rpmMax) then
@@ -1581,11 +1599,17 @@ local function printTelemetryWindow()
 	local panel_01_L_Height = 29
 	local panel_01_L_X = 0
 	local panel_01_L_Y = 0
+
+	local flightCounter = string.format("%04i", flightCount)
+	lcd.drawText(panel_01_L_X + 1,1,trans21.flight,FONT_MINI)
+	lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_MINI,flightCounter)+6,1,flightCounter,FONT_MINI)
 		
 	
-	lcd.drawText(panel_01_L_X + 1,(panel_01_L_Height - lcd.getTextHeight(FONT_MINI,"Time"))-1,"Time",FONT_MINI)
-	lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_MAXI,flightTimeMinutesSecondsString)-9,(panel_01_L_Height - lcd.getTextHeight(FONT_MAXI,flightTimeMinutesSecondsString))*0.5,flightTimeMinutesSecondsString,FONT_MAXI)
-	lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_BIG,flightTimeTenthsString)+6,(panel_01_L_Height - lcd.getTextHeight(FONT_BIG,flightTimeTenthsString)),flightTimeTenthsString,FONT_BIG)
+	lcd.drawText(panel_01_L_X + 1,(panel_01_L_Height - lcd.getTextHeight(FONT_MINI,trans21.time))-1,trans21.time,FONT_MINI)
+	--lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_MAXI,flightTimeMinutesSecondsString)-9,(panel_01_L_Height - lcd.getTextHeight(FONT_MAXI,flightTimeMinutesSecondsString))*0.5,flightTimeMinutesSecondsString,FONT_MAXI)
+	--lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_BIG,flightTimeTenthsString)+6,(panel_01_L_Height - lcd.getTextHeight(FONT_BIG,flightTimeTenthsString)),flightTimeTenthsString,FONT_BIG)
+	lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_BIG,flightTimeMinutesSecondsString)-6,(panel_01_L_Height - lcd.getTextHeight(FONT_BIG,flightTimeMinutesSecondsString)) + 2,flightTimeMinutesSecondsString,FONT_BIG)
+	lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_MINI,flightTimeTenthsString)+6,(panel_01_L_Height - lcd.getTextHeight(FONT_MINI,flightTimeTenthsString)),flightTimeTenthsString,FONT_MINI)
 
 
 ----------------------------------------------------
@@ -1619,7 +1643,7 @@ local function printTelemetryWindow()
 	lcd.drawFilledRectangle(rxQBarX+1,rxQBarY+1,rxQBarDeltaX,rxQBarHeight-2)
 		
 	local rx_1_Q_min_X = (((rx_1_Q_min)/(100))*100) * (rxQBarWidth-2)//100
-	lcd.setColor(red_r,red_g,red_b)
+	--lcd.setColor(red_r,red_g,red_b)
 	if (rx_1_Q_min < 99) then
 		lcd.drawFilledRectangle(rxQBarX+1+rx_1_Q_min_X,rxQBarY+1,2,rxQBarHeight-2)
 	elseif (rx_1_Q_min == 99) then
@@ -1629,7 +1653,7 @@ local function printTelemetryWindow()
 		
 	local rx_1_Q_String = string.format("%1.0f",rx_1_Q)
 	lcd.drawText((rxQBarX+rxQBarWidth) + (panel_02_L_Width - (rxQBarX+rxQBarWidth) - lcd.getTextWidth(FONT_MINI,rx_1_Q_String))*0.5-12,rxQBarY-4,rx_1_Q_String,FONT_MINI)
-	lcd.setColor(red_r,red_g,red_b)
+	--lcd.setColor(red_r,red_g,red_b)
 	local rx_1_Q_min_String = string.format("%i",rx_1_Q_min)
 	if (rx_1_Q_min == 101) then
 		lcd.drawText((rxQBarX+rxQBarWidth) + (panel_02_L_Width - (rxQBarX+rxQBarWidth) - lcd.getTextWidth(FONT_MINI,"-"))*0.5+10,rxQBarY-5,"-",FONT_MINI)
@@ -1655,7 +1679,7 @@ local function printTelemetryWindow()
 	lcd.setColor(base_r,base_g,base_b)
 	
 	local rx_1_RSSI_A1_fraction_min_X = (((rx_1_RSSI_A1_fraction_min)/(9))*100) * (rx1RSSIA1BarWidth-2)//100
-	lcd.setColor(red_r,red_g,red_b)
+	--lcd.setColor(red_r,red_g,red_b)
 	if (rx_1_RSSI_A1_fraction_min < 9) then
 		lcd.drawFilledRectangle(rx1RSSIA1BarX+1+rx_1_RSSI_A1_fraction_min_X,rx1RSSIA1BarY+1,2,rx1RSSIA1BarHeight-2)
 	end
@@ -1663,7 +1687,7 @@ local function printTelemetryWindow()
 		
 	local rx_1_RSSI_A1_fraction_String = string.format("%i",rx_1_RSSI_A1_fraction)
 	lcd.drawText((rx1RSSIA1BarX+rx1RSSIA1BarWidth) + (panel_02_L_Width - (rx1RSSIA1BarX+rx1RSSIA1BarWidth) - lcd.getTextWidth(FONT_MINI,rx_1_RSSI_A1_fraction_String))*0.5-12,rx1RSSIA1BarY-4,rx_1_RSSI_A1_fraction_String,FONT_MINI)
-	lcd.setColor(red_r,red_g,red_b)
+	--lcd.setColor(red_r,red_g,red_b)
 	local rx_1_RSSI_A1_fraction_min_String = string.format("%i",rx_1_RSSI_A1_fraction_min)
 	if (rx_1_RSSI_A1_fraction_min == 999) then
 		lcd.drawText((rx1RSSIA1BarX+rx1RSSIA1BarWidth) + (panel_02_L_Width - (rx1RSSIA1BarX+rx1RSSIA1BarWidth) - lcd.getTextWidth(FONT_MINI,"-"))*0.5+10,rx1RSSIA1BarY-5,"-",FONT_MINI)
@@ -1688,7 +1712,7 @@ local function printTelemetryWindow()
 	lcd.setColor(base_r,base_g,base_b)
 	
 	local rx_1_RSSI_A2_fraction_min_X = (((rx_1_RSSI_A2_fraction_min)/(9))*100) * (rx1RSSIA2BarWidth-2)//100
-	lcd.setColor(red_r,red_g,red_b)
+	--lcd.setColor(red_r,red_g,red_b)
 	if (rx_1_RSSI_A2_fraction_min < 9) then
 		lcd.drawFilledRectangle(rx1RSSIA2BarX+1+rx_1_RSSI_A2_fraction_min_X,rx1RSSIA2BarY+1,2,rx1RSSIA2BarHeight-2)
 	end
@@ -1696,7 +1720,7 @@ local function printTelemetryWindow()
 	
 	local rx_1_RSSI_A2_fraction_String = string.format("%i",rx_1_RSSI_A2_fraction)
 	lcd.drawText((rx1RSSIA2BarX+rx1RSSIA2BarWidth) + (panel_02_L_Width - (rx1RSSIA2BarX+rx1RSSIA2BarWidth) - lcd.getTextWidth(FONT_MINI,rx_1_RSSI_A2_fraction_String))*0.5-12,rx1RSSIA2BarY-4,rx_1_RSSI_A2_fraction_String,FONT_MINI)
-	lcd.setColor(red_r,red_g,red_b)
+	--lcd.setColor(red_r,red_g,red_b)
 	local rx_1_RSSI_A2_fraction_min_String = string.format("%i",rx_1_RSSI_A2_fraction_min)
 	if (rx_1_RSSI_A2_fraction_min == 999) then
 		lcd.drawText((rx1RSSIA2BarX+rx1RSSIA2BarWidth) + (panel_02_L_Width - (rx1RSSIA2BarX+rx1RSSIA2BarWidth) - lcd.getTextWidth(FONT_MINI,"-"))*0.5+10,rx1RSSIA2BarY-5,"-",FONT_MINI)
@@ -1745,50 +1769,63 @@ local function printTelemetryWindow()
 
 	lcd.drawFilledRectangle(panel_03_L_X,panel_03_L_Y,panel_03_L_Width-3,2)
 	
-	lcd.drawText(panel_03_L_X + 1,(panel_03_L_Y + panel_03_L_Height - lcd.getTextHeight(FONT_MINI,"FBL"))-1,"FBL",FONT_MINI)
+	if( elevatorSensorID > 0 or aileronSensorID > 0 or vibrationsSensorID > 0 ) then
+		lcd.drawText(panel_03_L_X + 1,(panel_03_L_Y + panel_03_L_Height - lcd.getTextHeight(FONT_MINI,"FBL"))-1,"FBL",FONT_MINI)
+	end
+
+	--[[
+	if( elevatorSensorParam > 0 ) then
+		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3,"Elev °/s:",FONT_MINI)
+		local elevatorRateMinString = string.format("%i",elevatorRateMin)
+		lcd.setColor(min_r,min_g,min_b)
+		if (elevatorRateMin == 1e6) then
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+3,"---",FONT_MINI)
+		else
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,elevatorRateMinString)-38,panel_03_L_Y+3,elevatorRateMinString,FONT_MINI)
+		end
 		
-	lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3,"Elev °/s:",FONT_MINI)
-	local elevatorRateMinString = string.format("%i",elevatorRateMin)
-	lcd.setColor(min_r,min_g,min_b)
-	if (elevatorRateMin == 1e6) then
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+3,"---",FONT_MINI)
-	else
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,elevatorRateMinString)-38,panel_03_L_Y+3,elevatorRateMinString,FONT_MINI)
+		lcd.setColor(base_r,base_g,base_b)
+		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+3,"/",FONT_MINI)
+		local elevatorRateMaxString = string.format("+%i",elevatorRateMax)
+		lcd.setColor(max_r,max_g,max_b)
+		if (elevatorRateMax == -1e6) then
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+3,"---",FONT_MINI)
+		else
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,elevatorRateMaxString)-5,panel_03_L_Y+3,elevatorRateMaxString,FONT_MINI)
+		end
 	end
-	
-	lcd.setColor(base_r,base_g,base_b)
-	lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+3,"/",FONT_MINI)
-	local elevatorRateMaxString = string.format("+%i",elevatorRateMax)
-	lcd.setColor(max_r,max_g,max_b)
-	if (elevatorRateMax == -1e6) then
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+3,"---",FONT_MINI)
-	else
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,elevatorRateMaxString)-5,panel_03_L_Y+3,elevatorRateMaxString,FONT_MINI)
-	end
-	
 	lcd.setColor(base_r,base_g,base_b)
 	
-	lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3+13,"Aile °/s:",FONT_MINI)
-	local aileronRateMinString = string.format("%i",aileronRateMin)
-	lcd.setColor(min_r,min_g,min_b)
-	if (aileronRateMin == 1e6) then
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+16,"---",FONT_MINI)
-	else
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,aileronRateMinString)-38,panel_03_L_Y+16,aileronRateMinString,FONT_MINI)
+	if( aileronSensorParam > 0 ) then
+		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3+13,"Aile °/s:",FONT_MINI)
+		local aileronRateMinString = string.format("%i",aileronRateMin)
+		lcd.setColor(min_r,min_g,min_b)
+		if (aileronRateMin == 1e6) then
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+16,"---",FONT_MINI)
+		else
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,aileronRateMinString)-38,panel_03_L_Y+16,aileronRateMinString,FONT_MINI)
+		end
+		
+		lcd.setColor(base_r,base_g,base_b)
+		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+16,"/",FONT_MINI)
+		local aileronRateMaxString = string.format("+%i",aileronRateMax)
+		lcd.setColor(max_r,max_g,max_b)
+		if (aileronRateMax == -1e6) then
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+16,"---",FONT_MINI)
+		else
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,aileronRateMaxString)-5,panel_03_L_Y+16,aileronRateMaxString,FONT_MINI)
+		end
 	end
-	
 	lcd.setColor(base_r,base_g,base_b)
-	lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+16,"/",FONT_MINI)
-	local aileronRateMaxString = string.format("+%i",aileronRateMax)
-	lcd.setColor(max_r,max_g,max_b)
-	if (aileronRateMax == -1e6) then
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+16,"---",FONT_MINI)
-	else
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,aileronRateMaxString)-5,panel_03_L_Y+16,aileronRateMaxString,FONT_MINI)
-	end
-	
-	lcd.setColor(base_r,base_g,base_b)
-	
+	]]--
+
+	--[[	
+	local flightCounter = string.format("%04i", flightCount)
+	lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3,"Flight:",FONT_MINI)
+	lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,flightCounter),panel_03_L_Y+3,flightCounter,FONT_MINI)
+	]]--
+
+	--[[	
 	lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3+13+13,"Rud °/s:",FONT_MINI)
 	local rudderRateMinString = string.format("%i",rudderRateMin)
 	lcd.setColor(min_r,min_g,min_b)
@@ -1797,7 +1834,7 @@ local function printTelemetryWindow()
 	else
 		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,rudderRateMinString)-38,panel_03_L_Y+29,rudderRateMinString,FONT_MINI)
 	end
-	
+
 	lcd.setColor(base_r,base_g,base_b)
 	lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+29,"/",FONT_MINI)
 	local rudderRateMaxString = string.format("+%i",rudderRateMax)
@@ -1809,7 +1846,22 @@ local function printTelemetryWindow()
 	end
 	
 	lcd.setColor(base_r,base_g,base_b)
-	
+	]]--
+
+	if (vibrationsSensorParam > 0) then	
+		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3+13+13,"Vibr.:",FONT_MINI)
+
+		local vibrationsString = string.format("%i %%",vibrations)
+		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,vibrationsString) - 38, panel_03_L_Y+29, vibrationsString,FONT_MINI)
+
+		local vibrationsMaxString = string.format("%i %%",vibrationsMax)
+		if (vibrationsMax == -1.0) then
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"--- %")-3, panel_03_L_Y+29, "--- %",FONT_MINI)
+		else
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,vibrationsMaxString)-3, panel_03_L_Y+29, vibrationsMaxString,FONT_MINI)
+		end
+	end
+	lcd.setColor(base_r,base_g,base_b)
 
 ----------------------------------------------------
 	
@@ -1822,20 +1874,21 @@ local function printTelemetryWindow()
 
 	lcd.drawFilledRectangle(panel_04_L_X,panel_04_L_Y,panel_04_L_Width-3,2)
 	
-	lcd.drawText(panel_04_L_X + panel_04_L_Width - lcd.getTextWidth(FONT_MINI,"RPM")-2,panel_04_L_Y + (panel_04_L_Height - lcd.getTextHeight(FONT_MINI,"RPM"))*0.5+3,"RPM",FONT_MINI)
-	local rpmString = string.format("%i",rpm)
-	lcd.drawText((panel_04_L_Width - lcd.getTextWidth(FONT_MAXI,rpmString))-25,panel_04_L_Y+panel_04_L_Height - lcd.getTextHeight(FONT_MAXI,rpmString)+8,rpmString,FONT_MAXI)
-	
-	lcd.drawText(panel_04_L_X+5,panel_04_L_Y + panel_04_L_Height - lcd.getTextHeight(FONT_MINI,"max")-12,"max",FONT_MINI)
-	local rpmMaxString = string.format("%i",rpmMax)
-	lcd.setColor(max_r,max_g,max_b)
+	if( rpmSensorParam > 0 ) then
+		lcd.drawText(panel_04_L_X + panel_04_L_Width - lcd.getTextWidth(FONT_MINI,"RPM")-2,panel_04_L_Y + (panel_04_L_Height - lcd.getTextHeight(FONT_MINI,"RPM"))*0.5+3,"RPM",FONT_MINI)
+		local rpmString = string.format("%i",rpm)
+		lcd.drawText((panel_04_L_Width - lcd.getTextWidth(FONT_MAXI,rpmString))-25,panel_04_L_Y+panel_04_L_Height - lcd.getTextHeight(FONT_MAXI,rpmString)+8,rpmString,FONT_MAXI)
+		
+		lcd.drawText(panel_04_L_X+5,panel_04_L_Y + panel_04_L_Height - lcd.getTextHeight(FONT_MINI,"max")-12,"max",FONT_MINI)
+		local rpmMaxString = string.format("%i",rpmMax)
+		--lcd.setColor(max_r,max_g,max_b)
 
-	if (rpmMax == -1.0) then
-		lcd.drawText(panel_04_L_X + (panel_04_L_Width - lcd.getTextWidth(FONT_MINI,"------"))*0.5 - 50,panel_04_L_Y + panel_04_L_Height -lcd.getTextHeight(FONT_MINI,"------"),"------",FONT_MINI)
-	else
-		lcd.drawText(panel_04_L_X + (panel_04_L_Width - lcd.getTextWidth(FONT_MINI,rpmMaxString))*0.5 - 50,panel_04_L_Y + panel_04_L_Height -lcd.getTextHeight(FONT_MINI,rpmMaxString),rpmMaxString,FONT_MINI)
+		if (rpmMax == -1.0) then
+			lcd.drawText(panel_04_L_X + (panel_04_L_Width - lcd.getTextWidth(FONT_MINI,"------"))*0.5 - 50,panel_04_L_Y + panel_04_L_Height -lcd.getTextHeight(FONT_MINI,"------"),"------",FONT_MINI)
+		else
+			lcd.drawText(panel_04_L_X + (panel_04_L_Width - lcd.getTextWidth(FONT_MINI,rpmMaxString))*0.5 - 50,panel_04_L_Y + panel_04_L_Height -lcd.getTextHeight(FONT_MINI,rpmMaxString),rpmMaxString,FONT_MINI)
+		end
 	end
-
 
 
 ----------------------------------------------------
@@ -1846,21 +1899,23 @@ local function printTelemetryWindow()
 	local panel_01_R_Y = 0
 	
 	lcd.setColor(base_r,base_g,base_b)
+
+	if( capacitySensorParam > 0 ) then		
+		lcd.drawText(panel_01_R_X + 0,panel_01_R_Y + panel_01_R_Height - lcd.getTextHeight(FONT_MINI,trans21.lipo)-1,trans21.lipo,FONT_MINI)
+		lcd.drawText((panel_01_R_X + panel_01_R_Width - lcd.getTextWidth(FONT_MINI,"mAh"))-2,panel_01_R_Y + (panel_01_R_Height - lcd.getTextHeight(FONT_MINI,"mAh"))*0.5,"mAh",FONT_MINI)
+		batteryCapacityUsedString = string.format("%i",batteryCapacityUsedTotal)
 		
-	lcd.drawText(panel_01_R_X + -5,panel_01_R_Y + panel_01_R_Height - lcd.getTextHeight(FONT_MINI,"Lipo")-1,"Lipo",FONT_MINI)
-	lcd.drawText((panel_01_R_X + panel_01_R_Width - lcd.getTextWidth(FONT_MINI,"mAh"))-2,panel_01_R_Y + (panel_01_R_Height - lcd.getTextHeight(FONT_MINI,"mAh"))*0.5,"mAh",FONT_MINI)
-	batteryCapacityUsedString = string.format("%i",batteryCapacityUsedTotal)
-	
-	if (hasRxBeenPoweredOn == true and batteryPercentageRounded <= alarmCapacityLevelFive and batteryPercentageRounded > alarmCapacityLevelSix and batteryCapacityUsedTotal > 0) then
-		lcd.setColor(orange_r,orange_g,orange_b)
-	elseif (hasRxBeenPoweredOn == true and batteryPercentageRounded <= alarmCapacityLevelSix and batteryCapacityUsedTotal > 0) then
-		lcd.setColor(red_r,red_g,red_b)
-	else
-		lcd.setColor(base_r,base_g,base_b)
+		if (hasRxBeenPoweredOn == true and batteryPercentageRounded <= alarmCapacityLevelFive and batteryPercentageRounded > alarmCapacityLevelSix and batteryCapacityUsedTotal > 0) then
+			lcd.setColor(orange_r,orange_g,orange_b)
+		elseif (hasRxBeenPoweredOn == true and batteryPercentageRounded <= alarmCapacityLevelSix and batteryCapacityUsedTotal > 0) then
+			lcd.setColor(red_r,red_g,red_b)
+		else
+			lcd.setColor(base_r,base_g,base_b)
+		end
+			
+		lcd.drawText((panel_01_R_X + panel_01_R_Width - lcd.getTextWidth(FONT_MAXI,batteryCapacityUsedString))-28,(panel_01_R_Height - lcd.getTextHeight(FONT_MAXI,batteryCapacityUsedString))*0.5,batteryCapacityUsedString,FONT_MAXI)
 	end
-		
-	lcd.drawText((panel_01_R_X + panel_01_R_Width - lcd.getTextWidth(FONT_MAXI,batteryCapacityUsedString))-28,(panel_01_R_Height - lcd.getTextHeight(FONT_MAXI,batteryCapacityUsedString))*0.5,batteryCapacityUsedString,FONT_MAXI)
-	
+
 	lcd.setColor(base_r,base_g,base_b)
 	
 	if (telemetryActive == true and estimateUsedLipoBoolean == true and voltagePerCellAtStartup < (voltageThresholdUsedLipo/100)) then
@@ -1881,56 +1936,80 @@ local function printTelemetryWindow()
 
 	lcd.drawFilledRectangle(panel_02_R_X+3,panel_02_R_Y,panel_02_R_Width-3,2)
 	
-	lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5,"Current",FONT_MINI)
-	local escCurrentString = string.format("%3.1f",escCurrent)
-	lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escCurrentString)-45,panel_02_R_Y,escCurrentString,FONT_BIG)
-	lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"A")-34,panel_02_R_Y+5,"A",FONT_MINI)
-	local escCurrentMaxString = string.format("%iA",escCurrentMax)
-	lcd.setColor(max_r,max_g,max_b)
-	if (escCurrentMax == -1.0) then
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- A")-5,panel_02_R_Y+5,"--- A",FONT_MINI)
-	else
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escCurrentMaxString)-5,panel_02_R_Y+5,escCurrentMaxString,FONT_MINI)
+	if( currentSensorParam > 0 ) then
+		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5,trans21.actCurrent,FONT_MINI)
+		local escCurrentString = string.format("%3.1f",escCurrent)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escCurrentString)-45,panel_02_R_Y,escCurrentString,FONT_BIG)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"A")-34,panel_02_R_Y+5,"A",FONT_MINI)
+		local escCurrentMaxString = string.format("%iA",escCurrentMax)
+		-- lcd.setColor(max_r,max_g,max_b)
+		if (escCurrentMax == -1.0) then
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- A")-5,panel_02_R_Y+5,"--- A",FONT_MINI)
+		else
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escCurrentMaxString)-5,panel_02_R_Y+5,escCurrentMaxString,FONT_MINI)
+		end
 	end
 	lcd.setColor(base_r,base_g,base_b)
 	
-	lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18,"Temp",FONT_MINI)
-	local escTempString = string.format("%i",escTemp)
-	lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escTempString)-45,panel_02_R_Y+0+18,escTempString,FONT_BIG)
-	lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"°C")-34,panel_02_R_Y+5+18,"°C",FONT_MINI)
-	local escTempMaxString = string.format("%i°C",escTempMax)
-	lcd.setColor(max_r,max_g,max_b)
-	if (escTempMax == -1.0) then
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"---°C")-5,panel_02_R_Y+5+18,"---°C",FONT_MINI)
-	else
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escTempMaxString)-5,panel_02_R_Y+5+18,escTempMaxString,FONT_MINI)
+	if( temperatureSensorParam > 0 ) then
+		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18,trans21.actTemp,FONT_MINI)
+		local escTempString = string.format("%i",escTemp)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escTempString)-45,panel_02_R_Y+0+18,escTempString,FONT_BIG)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"°C")-34,panel_02_R_Y+5+18,"°C",FONT_MINI)
+		local escTempMaxString = string.format("%i°C",escTempMax)
+		-- lcd.setColor(max_r,max_g,max_b)
+		if (escTempMax == -1.0) then
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"---°C")-5,panel_02_R_Y+5+18,"---°C",FONT_MINI)
+		else
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escTempMaxString)-5,panel_02_R_Y+5+18,escTempMaxString,FONT_MINI)
+		end
 	end
 	lcd.setColor(base_r,base_g,base_b)
 	
-	lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18,"Throttle",FONT_MINI)
-	local escThrottleString = string.format("%i",escThrottle)
-	lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escThrottleString)-45,panel_02_R_Y+0+18+18,escThrottleString,FONT_BIG)
-	lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"%")-34,panel_02_R_Y+5+18+18,"%",FONT_MINI)
-	local escThrottleMaxString = string.format("%i%%",escThrottleMax)
-	lcd.setColor(max_r,max_g,max_b)
-	if (escThrottleMax == -1.0) then
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- %")-3,panel_02_R_Y+5+18+18,"--- %",FONT_MINI)
-	else
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escThrottleMaxString)-3,panel_02_R_Y+5+18+18,escThrottleMaxString,FONT_MINI)
+	if( throttleSensorParam > 0 ) then
+		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18,trans21.actThrottle,FONT_MINI)
+		local escThrottleString = string.format("%i",escThrottle)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escThrottleString)-45,panel_02_R_Y+0+18+18,escThrottleString,FONT_BIG)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"%")-34,panel_02_R_Y+5+18+18,"%",FONT_MINI)
+		local escThrottleMaxString = string.format("%i%%",escThrottleMax)
+		-- lcd.setColor(max_r,max_g,max_b)
+		if (escThrottleMax == -1.0) then
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- %")-3,panel_02_R_Y+5+18+18,"--- %",FONT_MINI)
+		else
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escThrottleMaxString)-3,panel_02_R_Y+5+18+18,escThrottleMaxString,FONT_MINI)
+		end
 	end
 	lcd.setColor(base_r,base_g,base_b)
-	
+
+--[[	
 	lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18+18,"Vibrations",FONT_MINI)
 	local vibrationsString = string.format("%i",vibrations)
 	lcd.drawText(panel_02_R_X+(panel_02_R_Width-lcd.getTextWidth(FONT_BIG,vibrationsString))-45,panel_02_R_Y+0+18+18+18,vibrationsString,FONT_BIG)
 	lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"%")-34,panel_02_R_Y+5+18+18+18,"%",FONT_MINI)
 
 	local vibrationsMaxString = string.format("%i%%",vibrationsMax)
-	lcd.setColor(max_r,max_g,max_b)
+	-- lcd.setColor(max_r,max_g,max_b)
 	if (vibrationsMax == -1.0) then
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- %")-3,panel_02_R_Y+5+18+18+18,"--- %",FONT_MINI)
 	else
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,vibrationsMaxString)-3,panel_02_R_Y+5+18+18+18,vibrationsMaxString,FONT_MINI)
+	end
+	lcd.setColor(base_r,base_g,base_b)
+]]--
+
+	if( maltiSensorParam > 0 ) then
+		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18+18,trans21.actHeight,FONT_MINI)
+		local hightString = string.format("%i",hight)
+		lcd.drawText(panel_02_R_X+(panel_02_R_Width-lcd.getTextWidth(FONT_BIG,hightString))-45,panel_02_R_Y+0+18+18+18,hightString,FONT_BIG)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"m")-34,panel_02_R_Y+5+18+18+18,"m",FONT_MINI)
+
+		local hightMaxString = string.format("%im",hightMax)
+		-- lcd.setColor(max_r,max_g,max_b)
+		if (hightMax == -1.0) then
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- m")-3,panel_02_R_Y+5+18+18+18,"--- m",FONT_MINI)
+		else
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,hightMaxString)-3,panel_02_R_Y+5+18+18+18,hightMaxString,FONT_MINI)
+		end
 	end
 	lcd.setColor(base_r,base_g,base_b)
 
@@ -1942,79 +2021,80 @@ local function printTelemetryWindow()
 	local panel_03_R_X = panel_04_L_Width + batterySymbolWidth
 	local panel_03_R_Y = panel_01_R_Height + panel_02_R_Height
 	
-	lcd.setColor(base_r,base_g,base_b)
+		lcd.setColor(base_r,base_g,base_b)
 
-	lcd.drawFilledRectangle(panel_03_R_X+3,panel_03_R_Y,panel_03_R_Width-3,2)
-	
-	local voltagePerCellAveragedString = string.format("%4.2f",voltagePerCellAveraged)
-	lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltagePerCellAveragedString))*0.5,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MAXI,voltagePerCellAveragedString)-8,voltagePerCellAveragedString,FONT_MAXI)
-	lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltagePerCellAveragedString))*0.5 + 68,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_BIG,"V")-17,"V",FONT_BIG)
-	
-	lcd.drawText(panel_03_R_X+4,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MINI,"Cell")-9,"Cell",FONT_MINI)
-	lcd.drawText(panel_03_R_X+4,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MINI,"Volts")+2,"Volts",FONT_MINI)
-	
-	lcd.drawText(panel_03_R_X + panel_03_R_Width - lcd.getTextWidth(FONT_MINI,"min")-7,panel_03_R_Y+panel_03_R_Height-18,"min",FONT_MINI)
-	lcd.drawText(panel_03_R_X + panel_03_R_Width - lcd.getTextWidth(FONT_MINI,"max")-5,panel_03_R_Y+panel_03_R_Height-10,"max",FONT_MINI)
-
-	lcd.drawText(panel_03_R_X+64,panel_03_R_Y+panel_03_R_Height-16,"/",FONT_NORMAL)
-	lcd.setColor(green_r,green_g,green_b)
-	if (maxVoltagePerCell == -1.0) then
-		lcd.drawText(panel_03_R_X+75,panel_03_R_Y+panel_03_R_Height-16,"----",FONT_BOLD)
-	else
-		lcd.drawText(panel_03_R_X+71,panel_03_R_Y+panel_03_R_Height-16,string.format("%4.2f",maxVoltagePerCell),FONT_BOLD)
-	end
-	lcd.setColor(red_r,red_g,red_b)
-	if (minVoltagePerCell == 99.9) then
-		lcd.drawText(panel_03_R_X+41,panel_03_R_Y+panel_03_R_Height-16,"----",FONT_BOLD)
-	else
-		lcd.drawText(panel_03_R_X+34,panel_03_R_Y+panel_03_R_Height-16,string.format("%4.2f",minVoltagePerCell),FONT_BOLD)
-	end
-	lcd.setColor(base_r,base_g,base_b)
-	
-	
-	local voltageBarWidth = 76
-	local voltageBarHeight = 7
-	
-	local voltageBarX = panel_03_R_X + (panel_03_R_Width - voltageBarWidth)*0.5 
-	local voltageBarY = panel_03_R_Y+5
-	
-	local minVoltageValueBar = 3.20
-	local maxVoltageValueBar = 4.20
-	local restingVoltageTick = 3.75
-	
-	lcd.drawRectangle(voltageBarX,voltageBarY,voltageBarWidth,voltageBarHeight)
-	lcd.drawText(voltageBarX-23,voltageBarY-3,string.format("%4.2f",minVoltageValueBar),FONT_MINI)
-	lcd.drawText(voltageBarX+voltageBarWidth+2,voltageBarY-3,string.format("%4.2f",maxVoltageValueBar),FONT_MINI)
-	
-	local voltageBarFillRatio = ((voltagePerCellAveraged - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100
-	
-	if (voltageBarFillRatio >= 0 and voltageBarFillRatio <= 100) then
-		voltageBarFillRatio = voltageBarFillRatio
-	else
-		voltageBarFillRatio = 0
-	end
-	
-	local voltageBarDeltaX = (voltageBarFillRatio*(voltageBarWidth-2))//100
-	lcd.setColor(voltage_r,voltage_g,voltage_b)
+		lcd.drawFilledRectangle(panel_03_R_X+3,panel_03_R_Y,panel_03_R_Width-3,2)
 		
-	lcd.drawFilledRectangle(voltageBarX+1,voltageBarY+1,voltageBarDeltaX,voltageBarHeight-2)
-	lcd.setColor(base_r,base_g,base_b)
-	
-	local restingVoltageTickX = (((restingVoltageTick - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
-	lcd.setColor(base_r,base_g,base_b)
-	lcd.drawLine(voltageBarX+1+restingVoltageTickX,voltageBarY+1,voltageBarX+1+restingVoltageTickX,voltageBarY+voltageBarHeight-2)
-	lcd.setColor(base_r,base_g,base_b)
-	
-	local minVoltageValueX = (((minVoltagePerCell - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
-	lcd.setColor(red_r,red_g,red_b)
-	lcd.drawFilledRectangle(voltageBarX+1+minVoltageValueX,voltageBarY+1,3,voltageBarHeight-2)
-	lcd.setColor(base_r,base_g,base_b)
-	
-	local maxVoltageValueX = (((maxVoltagePerCell - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
-	lcd.setColor(green_r,green_g,green_b)
-	lcd.drawFilledRectangle(voltageBarX+1+maxVoltageValueX,voltageBarY+1,3,voltageBarHeight-2)
-	lcd.setColor(base_r,base_g,base_b)
-	
+	if( voltageSensorParam > 0 ) then
+		local voltagePerCellAveragedString = string.format("%4.2f",voltagePerCellAveraged)
+		lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltagePerCellAveragedString))*0.5,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MAXI,voltagePerCellAveragedString)-8,voltagePerCellAveragedString,FONT_MAXI)
+		lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltagePerCellAveragedString))*0.5 + 68,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_BIG,"V")-17,"V",FONT_BIG)
+		
+		lcd.drawText(panel_03_R_X+4,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MINI,trans21.cell)-9,trans21.cell,FONT_MINI)
+		lcd.drawText(panel_03_R_X+4,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MINI,trans21.cellVolt)+2,trans21.cellVolt,FONT_MINI)
+		
+		lcd.drawText(panel_03_R_X + panel_03_R_Width - lcd.getTextWidth(FONT_MINI,"min")-7,panel_03_R_Y+panel_03_R_Height-18,"min",FONT_MINI)
+		lcd.drawText(panel_03_R_X + panel_03_R_Width - lcd.getTextWidth(FONT_MINI,"max")-5,panel_03_R_Y+panel_03_R_Height-10,"max",FONT_MINI)
+
+		lcd.drawText(panel_03_R_X+64,panel_03_R_Y+panel_03_R_Height-16,"/",FONT_NORMAL)
+		lcd.setColor(green_r,green_g,green_b)
+		if (maxVoltagePerCell == -1.0) then
+			lcd.drawText(panel_03_R_X+75,panel_03_R_Y+panel_03_R_Height-16,"----",FONT_BOLD)
+		else
+			lcd.drawText(panel_03_R_X+71,panel_03_R_Y+panel_03_R_Height-16,string.format("%4.2f",maxVoltagePerCell),FONT_BOLD)
+		end
+		lcd.setColor(red_r,red_g,red_b)
+		if (minVoltagePerCell == 99.9) then
+			lcd.drawText(panel_03_R_X+41,panel_03_R_Y+panel_03_R_Height-16,"----",FONT_BOLD)
+		else
+			lcd.drawText(panel_03_R_X+34,panel_03_R_Y+panel_03_R_Height-16,string.format("%4.2f",minVoltagePerCell),FONT_BOLD)
+		end
+		lcd.setColor(base_r,base_g,base_b)
+		
+		
+		local voltageBarWidth = 76
+		local voltageBarHeight = 7
+		
+		local voltageBarX = panel_03_R_X + (panel_03_R_Width - voltageBarWidth)*0.5 
+		local voltageBarY = panel_03_R_Y+5
+		
+		local minVoltageValueBar = 3.20
+		local maxVoltageValueBar = 4.20
+		local restingVoltageTick = 3.75
+		
+		lcd.drawRectangle(voltageBarX,voltageBarY,voltageBarWidth,voltageBarHeight)
+		lcd.drawText(voltageBarX-23,voltageBarY-3,string.format("%4.2f",minVoltageValueBar),FONT_MINI)
+		lcd.drawText(voltageBarX+voltageBarWidth+2,voltageBarY-3,string.format("%4.2f",maxVoltageValueBar),FONT_MINI)
+		
+		local voltageBarFillRatio = ((voltagePerCellAveraged - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100
+		
+		if (voltageBarFillRatio >= 0 and voltageBarFillRatio <= 100) then
+			voltageBarFillRatio = voltageBarFillRatio
+		else
+			voltageBarFillRatio = 0
+		end
+		
+		local voltageBarDeltaX = (voltageBarFillRatio*(voltageBarWidth-2))//100
+		lcd.setColor(voltage_r,voltage_g,voltage_b)
+			
+		lcd.drawFilledRectangle(voltageBarX+1,voltageBarY+1,voltageBarDeltaX,voltageBarHeight-2)
+		lcd.setColor(base_r,base_g,base_b)
+		
+		local restingVoltageTickX = (((restingVoltageTick - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
+		lcd.setColor(base_r,base_g,base_b)
+		lcd.drawLine(voltageBarX+1+restingVoltageTickX,voltageBarY+1,voltageBarX+1+restingVoltageTickX,voltageBarY+voltageBarHeight-2)
+		lcd.setColor(base_r,base_g,base_b)
+		
+		local minVoltageValueX = (((minVoltagePerCell - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
+		lcd.setColor(red_r,red_g,red_b)
+		lcd.drawFilledRectangle(voltageBarX+1+minVoltageValueX,voltageBarY+1,3,voltageBarHeight-2)
+		lcd.setColor(base_r,base_g,base_b)
+		
+		local maxVoltageValueX = (((maxVoltagePerCell - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
+		lcd.setColor(green_r,green_g,green_b)
+		lcd.drawFilledRectangle(voltageBarX+1+maxVoltageValueX,voltageBarY+1,3,voltageBarHeight-2)
+		lcd.setColor(base_r,base_g,base_b)
+	end	
 		
 ----------------------------------------------------
 		
@@ -2058,6 +2138,7 @@ local function printTelemetryWindow()
 	lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_NORMAL,lipoCapacityString))*0.5,panel_central_Y+batterySymbolHeight-15,lipoCapacityString,FONT_NORMAL)
 	lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,"mAh"))*0.5,panel_central_Y+batterySymbolHeight+2,"mAh",FONT_MINI)
 	lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_NORMAL,lipoCellCountString))*0.5,panel_central_Y+batterySymbolHeight+17,lipoCellCountString,FONT_NORMAL)
+
 end
 --------------------------------------------------------------------------------------------
 
@@ -2067,6 +2148,9 @@ end
 --------------------------------------------------------------------------------------------
 local function init(code)
 	print ("-Lua application Heli Telem. Display initialized-")
+
+    flightCount = system.pLoad("flightCount", 0)
+    actTime = system.pLoad("actTime", 1)
 	
 	voltageSensorID = system.pLoad("voltageSensorID",0)
 	voltageSensorParam = system.pLoad("voltageSensorParam",0)
@@ -2090,6 +2174,9 @@ local function init(code)
 	
 	vibrationsSensorID = system.pLoad("vibrationsSensorID",0)
 	vibrationsSensorParam = system.pLoad("vibrationsSensorParam",0)
+
+	maltiSensorID = system.pLoad("maltiSensorID",0)
+	maltiSensorParam = system.pLoad("maltiSensorParam",0)
 
 	elevatorSensorID = system.pLoad("elevatorSensorID",0)
 	elevatorSensorParam = system.pLoad("elevatorSensorParam",0)
@@ -2131,14 +2218,14 @@ local function init(code)
 	switchResetTelemetryMinMax = system.pLoad("switchResetTelemetryMinMax")
 	switchActivateTelemetryMinMax = system.pLoad("switchActivateTelemetryMinMax")
 
-	system.registerForm(1,MENU_APPS,"Heli Telem. Display",initForm,nil,nil,nil)
+	system.registerForm(1,MENU_APPS,_appName,initForm,nil,nil,nil)
 
 	if (debugOn == true) then
-		system.registerForm(2,MENU_APPS,"Heli Telem. Display Debug",nil,nil,printForm,nil)
+		system.registerForm(2,MENU_APPS,_appName.." Debug",nil,nil,printForm,nil)
 	end
 
 	local modelName = system.getProperty("Model")
-	local windowTitle = "Heli Telem. Display - "..modelName
+	local windowTitle = _appName.." - "..modelName
 	
 	system.registerTelemetry(2,windowTitle,4,printTelemetryWindow)
 	system.registerLogVariable("Lipo Volts per Cell","V",(function(index) return voltagePerCellAveraged*100,2 end))
@@ -2165,6 +2252,8 @@ end
 --------------------------------------------------------------------------------------------
 -- Application interface
 --------------------------------------------------------------------------------------------
+setLanguage()
 collectgarbage()
-return {init = init, loop = loop, author = "Nick Pedersen", version = "1.02", name = "Heli Telem. Display"}
+_appName = trans21.appName.." ".._version
+return {init = init, loop = loop, author = "Michael Leopoldseder", version = _version, name = _appName}
 --------------------------------------------------------------------------------------------
