@@ -99,7 +99,7 @@
     "chirp":"Beep wenn Zellenspg. zu niedrig?",
     "lowThreshold":"    niedrige Zellspannung (V)",
     "switches":"Schalter",
-    "startTimer":"Start derFlugzeit",
+    "startTimer":"Start der Flugzeit",
     "resetTimer":"Zurücksetzen der Flugzeit",
     "activateMaxMin":"Telem. Max/Min anzeigen",
     "flightCounter":"Flugzähler",
