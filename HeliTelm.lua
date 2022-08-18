@@ -1840,9 +1840,9 @@ local function printTelemetryWindow()
 
 	lcd.drawFilledRectangle(panel_03_L_X,panel_03_L_Y,panel_03_L_Width-3,2)
 	
-	if( elevatorSensorID > 0 or aileronSensorID > 0 or rudderSensorParam > 0 or vibrationsSensorID > 0 ) then
-		lcd.drawText(panel_03_L_X + 1,(panel_03_L_Y + panel_03_L_Height - lcd.getTextHeight(FONT_MINI,"FBL"))-1,"FBL",FONT_MINI)
-	end
+	--if( elevatorSensorID > 0 or aileronSensorID > 0 or rudderSensorParam > 0 or vibrationsSensorID > 0 ) then
+		lcd.drawText(panel_03_L_X + 1,(panel_03_L_Y + panel_03_L_Height - lcd.getTextHeight(FONT_MINI,trans21.fbl))-1,trans21.fbl,FONT_MINI)
+	--end
 
 	local fontHeight = lcd.getTextHeight(FONT_MINI, trans21.actElevator) - 2
 
