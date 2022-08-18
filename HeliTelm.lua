@@ -299,8 +299,9 @@ local function capacitySensorChanged(value)
 	capacitySensorParam = sensorsAvailable[value].param
 	system.pSave("capacitySensorID",capacitySensorID)
 	system.pSave("capacitySensorParam",capacitySensorParam)
-	print("Capacity sensor",capacitySensorID,capacitySensorParam)
-	
+	if (debugOn == true) then
+		print("Capacity sensor",capacitySensorID,capacitySensorParam)
+	end
 end
 
 local function temperatureSensorChanged(value)
@@ -481,7 +482,9 @@ end
 local function switchActivateTelemetryMinMaxChanged(value)
 	switchActivateTelemetryMinMax = value
 	system.pSave("switchActivateTelemetryMinMax",value)
-	print("switchActivateTelemetryMinMax ",switchActivateTelemetryMinMax)
+	if (debugOn == true) then
+		print("switchActivateTelemetryMinMax ",switchActivateTelemetryMinMax)
+	end
 end
 
 local function switchResetTelemetryMinMaxChanged(value)
@@ -615,12 +618,18 @@ local function actTimeChanged(value)
     local pSave = system.pSave
 	actTime = value
 	pSave("actTime", value)
+	if (debugOn == true) then
+		print("actTime ",actTime)
+	end
 end
 
 local function flightCountChanged(value)
     local pSave = system.pSave
 	flightCount = value
 	pSave("flightCount", value)
+	if (debugOn == true) then
+		print("flightCount ",flightCount)
+	end
 end
 
 --------------------------------------------------------------------------------------------
@@ -1832,92 +1841,86 @@ local function printTelemetryWindow()
 		lcd.drawText(panel_03_L_X + 1,(panel_03_L_Y + panel_03_L_Height - lcd.getTextHeight(FONT_MINI,"FBL"))-1,"FBL",FONT_MINI)
 	end
 
-	--[[
+	local fontHeight = lcd.getTextHeight(FONT_MINI, trans21.actElevator) - 2
+
 	if( elevatorSensorParam > 0 ) then
-		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3,"Elev °/s:",FONT_MINI)
+		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1,trans21.actElevator,FONT_MINI)
 		local elevatorRateMinString = string.format("%i",elevatorRateMin)
 		lcd.setColor(min_r,min_g,min_b)
 		if (elevatorRateMin == 1e6) then
-			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+3,"---",FONT_MINI)
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+1,"---",FONT_MINI)
 		else
-			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,elevatorRateMinString)-38,panel_03_L_Y+3,elevatorRateMinString,FONT_MINI)
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,elevatorRateMinString)-38,panel_03_L_Y+1,elevatorRateMinString,FONT_MINI)
 		end
 		
 		lcd.setColor(base_r,base_g,base_b)
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+3,"/",FONT_MINI)
+		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+1,"/",FONT_MINI)
 		local elevatorRateMaxString = string.format("+%i",elevatorRateMax)
-		lcd.setColor(max_r,max_g,max_b)
+		--lcd.setColor(max_r,max_g,max_b)
 		if (elevatorRateMax == -1e6) then
-			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+3,"---",FONT_MINI)
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+1,"---",FONT_MINI)
 		else
-			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,elevatorRateMaxString)-5,panel_03_L_Y+3,elevatorRateMaxString,FONT_MINI)
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,elevatorRateMaxString)-5,panel_03_L_Y+1,elevatorRateMaxString,FONT_MINI)
 		end
 	end
 	lcd.setColor(base_r,base_g,base_b)
 	
 	if( aileronSensorParam > 0 ) then
-		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3+13,"Aile °/s:",FONT_MINI)
+		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1+fontHeight,trans21.actAileron,FONT_MINI)
 		local aileronRateMinString = string.format("%i",aileronRateMin)
 		lcd.setColor(min_r,min_g,min_b)
 		if (aileronRateMin == 1e6) then
-			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+16,"---",FONT_MINI)
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+1+fontHeight,"---",FONT_MINI)
 		else
-			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,aileronRateMinString)-38,panel_03_L_Y+16,aileronRateMinString,FONT_MINI)
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,aileronRateMinString)-38,panel_03_L_Y+ 1+fontHeight,aileronRateMinString,FONT_MINI)
 		end
 		
 		lcd.setColor(base_r,base_g,base_b)
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+16,"/",FONT_MINI)
+		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+1+fontHeight,"/",FONT_MINI)
 		local aileronRateMaxString = string.format("+%i",aileronRateMax)
-		lcd.setColor(max_r,max_g,max_b)
+		--lcd.setColor(max_r,max_g,max_b)
 		if (aileronRateMax == -1e6) then
-			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+16,"---",FONT_MINI)
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+1+fontHeight,"---",FONT_MINI)
 		else
-			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,aileronRateMaxString)-5,panel_03_L_Y+16,aileronRateMaxString,FONT_MINI)
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,aileronRateMaxString)-5,panel_03_L_Y+1+fontHeight,aileronRateMaxString,FONT_MINI)
 		end
 	end
 	lcd.setColor(base_r,base_g,base_b)
-	]]--
 
-	--[[	
-	local flightCounter = string.format("%04i", flightCount)
-	lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3,"Flight:",FONT_MINI)
-	lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,flightCounter),panel_03_L_Y+3,flightCounter,FONT_MINI)
-	]]--
+	if( rudderSensorParam > 0 ) then
+		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1+fontHeight+fontHeight,trans21.actRudder,FONT_MINI)
+		local rudderRateMinString = string.format("%i",rudderRateMin)
+		lcd.setColor(min_r,min_g,min_b)
+		if (rudderRateMin == 1e6) then
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+1+fontHeight+fontHeight,"---",FONT_MINI)
+		else
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,rudderRateMinString)-38,panel_03_L_Y+1+fontHeight+fontHeight,rudderRateMinString,FONT_MINI)
+		end
 
-	--[[	
-	lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3+13+13,"Rud °/s:",FONT_MINI)
-	local rudderRateMinString = string.format("%i",rudderRateMin)
-	lcd.setColor(min_r,min_g,min_b)
-	if (rudderRateMin == 1e6) then
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+29,"---",FONT_MINI)
-	else
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,rudderRateMinString)-38,panel_03_L_Y+29,rudderRateMinString,FONT_MINI)
-	end
-
+		lcd.setColor(base_r,base_g,base_b)
+		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+1+fontHeight+fontHeight,"/",FONT_MINI)
+		local rudderRateMaxString = string.format("+%i",rudderRateMax)
+		--lcd.setColor(max_r,max_g,max_b)
+		if (rudderRateMax == -1e6) then
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+1+fontHeight+fontHeight,"---",FONT_MINI)
+		else
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,rudderRateMaxString)-5,panel_03_L_Y+1+fontHeight+fontHeight,rudderRateMaxString,FONT_MINI)
+		end
+	end	
 	lcd.setColor(base_r,base_g,base_b)
-	lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+29,"/",FONT_MINI)
-	local rudderRateMaxString = string.format("+%i",rudderRateMax)
-	lcd.setColor(max_r,max_g,max_b)
-	if (rudderRateMax == -1e6) then
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+29,"---",FONT_MINI)
-	else
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,rudderRateMaxString)-5,panel_03_L_Y+29,rudderRateMaxString,FONT_MINI)
-	end
-	
-	lcd.setColor(base_r,base_g,base_b)
-	]]--
 
 	if (vibrationsSensorParam > 0) then	
-		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+3+13+13,"Vibr.:",FONT_MINI)
+		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1+fontHeight+fontHeight+fontHeight,trans21.actVibration,FONT_MINI)
 
-		local vibrationsString = string.format("%i %%",vibrations)
-		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,vibrationsString) - 38, panel_03_L_Y+29, vibrationsString,FONT_MINI)
+		local vibrationsString = string.format("%i",vibrations)
+		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,vibrationsString) - 38, panel_03_L_Y+1+fontHeight+fontHeight+fontHeight, vibrationsString,FONT_MINI)
 
-		local vibrationsMaxString = string.format("%i %%",vibrationsMax)
+		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+1+fontHeight+fontHeight+fontHeight,"/",FONT_MINI)
+		local vibrationsMaxString = string.format("%i",vibrationsMax)
 		if (vibrationsMax == -1.0) then
-			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"--- %")-3, panel_03_L_Y+29, "--- %",FONT_MINI)
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15, panel_03_L_Y+1+fontHeight+fontHeight+fontHeight, "---",FONT_MINI)
 		else
-			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,vibrationsMaxString)-3, panel_03_L_Y+29, vibrationsMaxString,FONT_MINI)
+			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,vibrationsMaxString)-5, panel_03_L_Y+1+fontHeight+fontHeight+fontHeight, vibrationsMaxString,FONT_MINI)
 		end
 	end
 	lcd.setColor(base_r,base_g,base_b)
