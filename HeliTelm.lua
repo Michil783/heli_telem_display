@@ -7,17 +7,14 @@
 	v1.00 - 2021-08-14 - Initial release
 	v1.01 - 2021-08-15 - Bug fix
 	v1.02 - 2021-08-15 - Bug fix
+
+	Starting from here by Michael Leopoldseder
+
 	v1.03 - 2022-08-13 - changes some colors and telemetry sensors 
 	v1.04 - 2022-08-17 - adding flight counter 
 	v1.05 - 2022-08-18 - changing Telemetry window name and adding language support
 
-	Thanks for trying out my Jeti Lua app! This is my attempt at learning Lua as well as 
-	putting together an app for how I specifically wanted to display the telemetry for my
-	FBL-based helicopters. It is based on my use of the Brain2 FBL, but will work well with
-	any modern FBL controller. The one caveat is that it is very much dependent on having
-	current and capacity sensing from the ESC.
-	
-	It is a full screen telemetry window, and is hardcoded to display:
+		It is a full screen telemetry window, and is hardcoded to display:
 	
 		- A flight timer (counts upwards only).
 
@@ -57,6 +54,10 @@
 
 		- The app will detect when a new lipo is plugged in and automatically reset the flight timer and telemetry values,
 		  though this can also be done manually by defining the appropriate switches in the menu.
+
+		- Added a flight counter and reorganized some values
+
+		- added language support
 		  
 	This is purely for my own hobbyist and non-commercial use.	No liability or responsibility 
 	is assumed for your own use! Feel free to use this code in any way you see fit to modify 
@@ -67,6 +68,7 @@
 	
 	Code heavily inspired by JETI model s.r.o.'s own lua application samples, as well as:
 
+		- Nick Pedersen Heli Telem. Display from https://github.com/nickthenorse/heli_telem_display
 		- Tero excellent collection of lua "Jeti Tools" https://www.rc-thoughts.com/
 		- Thorn's "Display" app from https://www.jetiforum.de/ and https://www.thorn-klaus-jeti.de
 		- Dit71's "dbdis" app from https://www.jetiforum.de/ and https://github.com/ribid1/dbdis
