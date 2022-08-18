@@ -64,7 +64,8 @@
     "usedBattery1":"Lipo not",
     "usedBattery2":"fully",
     "usedBattery3":"charged",
-    "usedBattery4":""
+    "usedBattery4":"",
+    "fbl":"FBL"
   },
   "de":{
     "appName":"Heli Telem. Display",
@@ -130,6 +131,7 @@
     "usedBattery1":"Akku",
     "usedBattery2":"nicht",
     "usedBattery3":"vollst.",
-    "usedBattery4":"geladen"
+    "usedBattery4":"geladen",
+    "fbl":"FBL"
   }
 }
