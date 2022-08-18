@@ -2,18 +2,74 @@
 	
 	Heli Telem. Display - Full Screen Telemetry Display for Helicopters
 	
-    By Michael Leopoldseder based on Nick Pedersen.
+    By Nick Pedersen (username "nickthenorse" on RCGroups.com and HeliFreak.com).
 	
 	v1.00 - 2021-08-14 - Initial release
 	v1.01 - 2021-08-15 - Bug fix
 	v1.02 - 2021-08-15 - Bug fix
-
-    Michael Leopoldseder changes starts here
-
 	v1.03 - 2022-08-13 - changes some colors and telemetry sensors 
 	v1.04 - 2022-08-17 - adding flight counter 
 	v1.05 - 2022-08-18 - changing Telemetry window name and adding language support
 
+	Thanks for trying out my Jeti Lua app! This is my attempt at learning Lua as well as 
+	putting together an app for how I specifically wanted to display the telemetry for my
+	FBL-based helicopters. It is based on my use of the Brain2 FBL, but will work well with
+	any modern FBL controller. The one caveat is that it is very much dependent on having
+	current and capacity sensing from the ESC.
+	
+	It is a full screen telemetry window, and is hardcoded to display:
+	
+		- A flight timer (counts upwards only).
+
+		- Rx telemetry: Instantaneous and mininum values for Q, A1, A2, and Rx voltage 
+		  (max/min recorded for voltage). Signal levels also shown graphically.
+		  
+		- Maximum recorded FBL rotation rates for the elevator, aileron and rudder channels 
+		  for the flight.
+		  
+		- Headspeed (instantaneous and maximum).
+
+		- Lipo capacity used, in both percentage and in mAh. Capacity used also shown graphically
+		  with a battery symbol. Total flight capacity of the lipo is assumed to be 80% of the 
+		  nominal lipo capacity (ie, 80% of a 3700 mAh lipo = 2960 mAh).
+		  
+		- Custom selectable voice file/alarm levels for battery capacity used during the flight.
+
+		- Custom selectable estimation of used battery capacity based on voltage, if the Rx is
+		  powered up with a lipo that is not fully charged. Can also warn via audible voice file.
+		  
+		- The instantaneous and maximum values for ESC current, ESC temperature, ESC 
+		  throttle/power, and FBL vibration level.
+		  
+		- Main flight pack voltage per cell (just the total lipo voltage divided by the
+		  number of cells), as well as the min and max values recorded during the flight.
+		  Min and max voltages shown graphically.
+		  
+		- Custom defineable voltage correction factor/multiplier - most ESCs do not allow you to tweak 
+		  the voltage reading in case it is a few percent inaccurate.
+		  
+		- This main flight pack voltage per cell is also recorded as a custom variable in the
+		  Jeti flight logs.
+		  
+		- Allows user to define a time delay to allow for FBL initialisation. Typically need ca. 10 seconds.
+
+		- Allows user to specify number of samples to average voltage readings.
+
+		- The app will detect when a new lipo is plugged in and automatically reset the flight timer and telemetry values,
+		  though this can also be done manually by defining the appropriate switches in the menu.
+		  
+	This is purely for my own hobbyist and non-commercial use.	No liability or responsibility 
+	is assumed for your own use! Feel free to use this code in any way you see fit to modify 
+	and/or personalise the telemetry that is being displayed, or as a way to learn lua for yourself.
+	
+	Also: this is my first attempt at a lua app for Jeti. I can't claim it is particularly
+	efficiently coded, and is in no way optimised for optimal memory usage. But it works :)
+	
+	Code heavily inspired by JETI model s.r.o.'s own lua application samples, as well as:
+
+		- Tero excellent collection of lua "Jeti Tools" https://www.rc-thoughts.com/
+		- Thorn's "Display" app from https://www.jetiforum.de/ and https://www.thorn-klaus-jeti.de
+		- Dit71's "dbdis" app from https://www.jetiforum.de/ and https://github.com/ribid1/dbdis
 
 --------------------------------------------------------------------------------------------]]
 
@@ -168,6 +224,7 @@ local rx_1_RSSI_A2 = 0
 
 local function setLanguage()
     local lng=system.getLocale()
+    print( lng )
     local file = io.readall("Apps/Lang/HeliTelm.jsn")
     local obj = json.decode(file)
     if(obj) then
@@ -290,7 +347,7 @@ local function maltiSensorChanged(value)
 	system.pSave("maltiSensorID",maltiSensorID)
 	system.pSave("maltiSensorParam",maltiSensorParam)
 	if (debugOn == true) then
-		print("Malti sensor",maltiSensorID,maltiSensorParam)
+		print("mAlti sensor",maltiSensorID,maltiSensorParam)
 	end
 end
 
@@ -1901,7 +1958,7 @@ local function printTelemetryWindow()
 	lcd.setColor(base_r,base_g,base_b)
 
 	if( capacitySensorParam > 0 ) then		
-		lcd.drawText(panel_01_R_X + 0,panel_01_R_Y + panel_01_R_Height - lcd.getTextHeight(FONT_MINI,trans21.lipo)-1,trans21.lipo,FONT_MINI)
+		lcd.drawText(panel_01_R_X + -5,panel_01_R_Y + panel_01_R_Height - lcd.getTextHeight(FONT_MINI,trans21.lipo)-1,trans21.lipo,FONT_MINI)
 		lcd.drawText((panel_01_R_X + panel_01_R_Width - lcd.getTextWidth(FONT_MINI,"mAh"))-2,panel_01_R_Y + (panel_01_R_Height - lcd.getTextHeight(FONT_MINI,"mAh"))*0.5,"mAh",FONT_MINI)
 		batteryCapacityUsedString = string.format("%i",batteryCapacityUsedTotal)
 		
@@ -1920,7 +1977,7 @@ local function printTelemetryWindow()
 	
 	if (telemetryActive == true and estimateUsedLipoBoolean == true and voltagePerCellAtStartup < (voltageThresholdUsedLipo/100)) then
 		lcd.setColor(red_r,red_g,red_b)
-		lcd.drawText(panel_01_R_X + -5,panel_01_R_Y+5,"Est.",FONT_MINI)
+		lcd.drawText(panel_01_R_X + -5,panel_01_R_Y+5,trans21.estimate,FONT_MINI)
 		lcd.setColor(base_r,base_g,base_b)
 	end
 
@@ -2126,9 +2183,10 @@ local function printTelemetryWindow()
 	
 	if (telemetryActive == true and estimateUsedLipoBoolean == true and voltagePerCellAtStartup < (voltageThresholdUsedLipo/100)) then
 		lcd.setColor(red_r,red_g,red_b)
-		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,"Lipo not"))*0.5,panel_central_Y+batterySymbolY+10,"Lipo not",FONT_MINI)
-		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,"fully"))*0.5,panel_central_Y+batterySymbolY+22,"fully",FONT_MINI)
-		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,"charged!"))*0.5,panel_central_Y+batterySymbolY+34,"charged!",FONT_MINI)
+		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,trans21.usedBattery1))*0.5,panel_central_Y+batterySymbolY+10,trans21.usedBattery1,FONT_MINI)
+		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,trans21.usedBattery2))*0.5,panel_central_Y+batterySymbolY+22,trans21.usedBattery2,FONT_MINI)
+		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,trans21.usedBattery3))*0.5,panel_central_Y+batterySymbolY+34,trans21.usedBattery3,FONT_MINI)
+		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,trans21.usedBattery4))*0.5,panel_central_Y+batterySymbolY+46,trans21.usedBattery4,FONT_MINI)
 		lcd.setColor(base_r,base_g,base_b)
 	end
 	
@@ -2255,5 +2313,5 @@ end
 setLanguage()
 collectgarbage()
 _appName = trans21.appName.." ".._version
-return {init = init, loop = loop, author = "Michael Leopoldseder", version = _version, name = _appName}
+return {init = init, loop = loop, author = "Nick Pedersen", version = _version, name = _appName}
 --------------------------------------------------------------------------------------------

@@ -56,7 +56,11 @@
     "actThrottle":"Throttle",
     "actHeight":"Height",
     "cell":"Cell",
-    "cellVolt":"Volts"
+    "cellVolt":"Volts",
+    "usedBattery1":"Lipo not",
+    "usedBattery2":"fully",
+    "usedBattery3":"charged",
+    "usedBattery4":""
   },
   "de":{
     "appName":"Heli Telem. Display",
@@ -114,6 +118,10 @@
     "actThrottle":"Gas",
     "actHeight":"Höhe",
     "cell":"Cell",
-    "cellVolt":"Volts"
+    "cellVolt":"Volts",
+    "usedBattery1":"Akku",
+    "usedBattery2":"nicht",
+    "usedBattery3":"vollst.",
+    "usedBattery4":"geladen"
   }
 }
