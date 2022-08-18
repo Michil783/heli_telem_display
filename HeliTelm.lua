@@ -1,4 +1,4 @@
---[[------------------------------------------------------------------------------------------
+7--[[------------------------------------------------------------------------------------------
 	
 	Heli Telem. Display - Full Screen Telemetry Display for Helicopters
 	
@@ -84,7 +84,7 @@ collectgarbage()
 
 local _version = "1.05"
 local _appName = ""
-local debugOn = true
+local debugOn = false
 
 --
 local sensorsAvailable = {}
