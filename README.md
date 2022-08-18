@@ -24,7 +24,9 @@ It is a full screen telemetry window, and is changed in some points from Nick Pe
 	
 	- it has alanguage file which is currently available in english and german
 	  (please feel free to add additional languages)
-	  
+
+![Screenshot Main Window](HeliTelem1.png?raw=true "Screenshot Main Window")
+
 This is purely for my own hobbyist and non-commercial use.
 No liability or responsibility is assumed for your own use! Feel free to use this code in any way you see fit to modify 
 and/or personalise the telemetry that is being displayed, or as a way to learn lua for yourself.
