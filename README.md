@@ -22,7 +22,7 @@ It is a full screen telemetry window, and is changed in some points from Nick Pe
 	  
 	- most of the min/max values are shown in standard color for better readability
 	
-	- it has alanguage file which is currently available in english and german
+	- it supports languages (currently available in english and german)
 	  (please feel free to add additional languages)
 
 ![Screenshot Main Window](Screen001.png?raw=true "Screenshot Main Window")
