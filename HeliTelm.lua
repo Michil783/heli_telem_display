@@ -13,6 +13,7 @@
 	v1.03 - 2022-08-13 - changes some colors and telemetry sensors 
 	v1.04 - 2022-08-17 - adding flight counter 
 	v1.05 - 2022-08-18 - changing Telemetry window name and adding language support
+	v1.06 - 2022-08-19 - removed Cell valotage as logging telemetry due to calculated value and not a real value
 
 		It is a full screen telemetry window, and is hardcoded to display:
 	
@@ -82,7 +83,7 @@
 
 collectgarbage()
 
-local _version = "1.05"
+local _version = "1.06"
 local _appName = ""
 local debugOn = false
 
@@ -2282,7 +2283,7 @@ local function init(code)
 	local windowTitle = _appName.." - "..modelName
 	
 	system.registerTelemetry(2,windowTitle,4,printTelemetryWindow)
-	system.registerLogVariable("Lipo Volts per Cell","V",(function(index) return voltagePerCellAveraged*100,2 end))
+	--system.registerLogVariable("Lipo Volts per Cell","V",(function(index) return voltagePerCellAveraged*100,2 end))
 
 	if estimateUsedLipo == 1 then
 		estimateUsedLipoBoolean = true
