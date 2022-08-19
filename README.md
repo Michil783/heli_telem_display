@@ -7,6 +7,7 @@ Compatible with DS-12, DS-24, DS-14 II, DS-16 II and corresponding DC models.
 By Michael Leopoldseder forked from the excellent work of Nick Pedersen (https://github.com/nickthenorse/heli_telem_display)
 
 	v1.05 - 2022-08-18 - Initial release
+	v1.06 - 2022-08-19 - removed Cell valotage as logging telemetry due to calculated value and not a real value
 	
 Instructions: download the file HeliTelm.lua as well as the folder Lang and copy it to the /Apps folder on your Jeti transmitter. Then install via "User Applications" submenu.
 
