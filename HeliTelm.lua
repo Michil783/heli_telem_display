@@ -102,7 +102,7 @@ local aileronSensorID, aileronSensorParam
 local rudderSensorID, rudderSensorParam
 local maltiSensorID, maltiSensorParam
 
-local flightCount, actTime, countSet = 0, 1, 0
+local flightCount, actTime, countSet = 0, 10, 0
 
 local lipoCellCount
 local lipoCapacity
@@ -2280,10 +2280,9 @@ local function init(code)
 	end
 
 	local modelName = system.getProperty("Model")
-	local windowTitle = _appName.." - "..modelName
+	local windowTitle = _appName.." ".._version.." - "..modelName
 	
 	system.registerTelemetry(2,windowTitle,4,printTelemetryWindow)
-	--system.registerLogVariable("Lipo Volts per Cell","V",(function(index) return voltagePerCellAveraged*100,2 end))
 
 	if estimateUsedLipo == 1 then
 		estimateUsedLipoBoolean = true
@@ -2307,8 +2306,10 @@ end
 --------------------------------------------------------------------------------------------
 -- Application interface
 --------------------------------------------------------------------------------------------
+local b = collectgarbage("count")
 setLanguage()
-collectgarbage()
-_appName = trans21.appName.." ".._version
-return {init = init, loop = loop, author = "Nick Pedersen", version = _version, name = _appName}
+local a = collectgarbage("count")
+print( a - b )
+_appName = trans21.appName
+return {init = init, loop = loop, author = "Michael Leopoldseder", version = _version, name = _appName}
 --------------------------------------------------------------------------------------------
