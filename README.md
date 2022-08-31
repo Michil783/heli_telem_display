@@ -11,6 +11,8 @@ By Michael Leopoldseder forked from the excellent work of Nick Pedersen (https:/
 	
 Instructions: download the file HeliTelm.lua as well as the folder Lang and copy it to the /Apps folder on your Jeti transmitter. Then install via "User Applications" submenu.
 
+There is a branch (split) were the app is split up into three parets. Goal is to balance memory memory usage to achieve DS-16 compatibility.
+
 It is a full screen telemetry window, and is changed in some points from Nick Pedersen's original
 
 	- It shows the flight hight if a hight sensor is configured
