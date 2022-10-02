@@ -8,8 +8,17 @@ By Michael Leopoldseder forked from the excellent work of Nick Pedersen (https:/
 
 	v1.05 - 2022-08-18 - Initial release
 	v1.06 - 2022-08-19 - removed Cell valotage as logging telemetry due to calculated value and not a real value
+	v2.00 - 2022-08-25 - split into more apps to keep it small
+	v2.01 - 2022-08-26 - removed low voltage chirp and introduced count down timer
+	v2.02 - 2022-08-28 - pLoad/pSave optimizations
+	v2.03 - 2022-08-29 - moved functions from Screen to HeliTelm
+	v2.04 - 2022-08-30 - moved a function back to Screen due to higher memory usage in HeliTelm
+	v2.05 - 2022-09-03 - fault corrections
+	v2.06 - 2022-09-06 - get back some PlayVoiceAlarms from Screen and move it to new function PlayTimerAlarms
+	v2.07 - 2022-09-07 - use TimerV.jsn file for countdown alert
+	v2.08 - 2022-10-02 - small optimizations and reintegration of screen.lua (introduced v2.0)
 	
-Instructions: download the file HeliTelm.lua as well as the folder Lang and copy it to the /Apps folder on your Jeti transmitter. Then install via "User Applications" submenu.
+Instructions: download the file HeliTelm.lua as well as the folder Lang and HeliTelm and copy it to the /Apps folder on your Jeti transmitter. Then install via "User Applications" submenu.
 
 There is a branch (splitApp) were the app is split up into three parts (HeliTelm, Screen and Form app). Goal is to balance memory usage to achieve DS-16 compatibility.
 
@@ -27,6 +36,8 @@ It is a full screen telemetry window, and is changed in some points from Nick Pe
 	
 	- it supports languages (currently available in english and german)
 	  (please feel free to add additional languages)
+
+	- seperated setup form into an own lua script (HeliTelm/form.lua)
 
 ![Screenshot Main Window](Screen001.png?raw=true "Screenshot Main Window")
 
