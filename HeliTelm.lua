@@ -14,6 +14,15 @@
 	v1.04 - 2022-08-17 - adding flight counter 
 	v1.05 - 2022-08-18 - changing Telemetry window name and adding language support
 	v1.06 - 2022-08-19 - removed Cell valotage as logging telemetry due to calculated value and not a real value
+	v2.00 - 2022-08-25 - split into more apps to keep it smal
+	v2.01 - 2022-08-26 - removed low voltage chirp and introduced count down timer
+	v2.02 - 2022-08-28 - pLoad/pSave optimizatiuons
+	v2.03 - 2022-08-29 - moved functions from Screen to HeliTelm
+	v2.04 - 2022-08-30 - moved a function back to Screen due to higher memory usage in HeliTelm
+	v2.05 - 2022-09-03 - fault corrections
+	v2.06 - 2022-09-06 - get back some PlayVoiceAlarms from Screen and move it to new function PlayTimerAlarms
+	v2.07 - 2022-09-07 - use TimerV.jsn file for countdown alert
+	v2.08 - 2022-10-02 - small optimizations and reintegration of screen.lua
 
 		It is a full screen telemetry window, and is hardcoded to display:
 	
@@ -83,1032 +92,90 @@
 
 collectgarbage()
 
-local _version = "1.06"
+local _version = "2.08"
+--local _screen_version = "1"
+local _form_version = "1"
 local _appName = ""
-local debugOn = false
 
---
-local sensorsAvailable = {}
-local voltageSensorID, voltageSensorParam
-local voltageSensorName, voltageSensorLabel
-local currentSensorID, currentSensorParam
-local capacitySensorID, capacitySensorParam
-local temperatureSensorID, temperatureSensorParam
-local throttleSensorID, throttleSensorParam
-local rpmSensorID, rpmSensorParam
-local vibrationsSensorID, vibrationsSensorParam
-local elevatorSensorID, elevatorSensorParam
-local aileronSensorID, aileronSensorParam
-local rudderSensorID, rudderSensorParam
-local maltiSensorID, maltiSensorParam
+--local debugOn = true
+local debugVoltage = 23.65
+local debugCapacity = true
 
-local flightCount, actTime, countSet = 0, 10, 0
+local setupvars = {}
+--local Form, Screen
+local Form
 
-local lipoCellCount
-local lipoCapacity
-local correctionFactor
-local estimateUsedLipoBoolean
-local checkboxIndex1
-local checkboxIndex2
-local estimateUsedLipo
-local voltageThresholdUsedLipo
-local alarmUsedLipoDetectedFile
-local isAlarmUsedLipoDetectedActive = false
+local batteryCapacityUsedAtStartup = 0
+local voltagePerCell = 0.0
+local batteryPercentage=55
+local batteryCapacityUsed = 0
+local batteryCapacityPercentAtStartup = 0
 
-local timeDelay
-
-local averagingWindowCellVoltage
-local averagingWindowRxVoltage
-
-local switchStartTimer
-local switchResetTimer
-local switchActivateTelemetryMinMax
-local switchResetTelemetryMinMax
-
-local alarmCapacityLevelOne
-local alarmCapacityLevelTwo
-local alarmCapacityLevelThree
-local alarmCapacityLevelFour
-local alarmCapacityLevelFive
-local alarmCapacityLevelSix
-local alarmCapacityLevelOneFile
-local alarmCapacityLevelTwoFile
-local alarmCapacityLevelThreeFile
-local alarmCapacityLevelFourFile
-local alarmCapacityLevelFiveFile
-local alarmCapacityLevelSixFile
-local alarmVoltageLevelOne
-
-local lowVoltageChirp = 0
-local lowVoltageChirpBoolean = false
-
-local minVoltagePerCell = 99.9
-local maxVoltagePerCell = -1.0
-local rx_1_Q_min = 101
-local rx_1_RSSI_A1_min = 1000
-local rx_1_RSSI_A2_min = 1000
-local rx_1_Voltage_min = 99.9
-local rx_1_Voltage_max = -1.0
-local escCurrentMax = -1.0
-local escTempMax = -1
-local escThrottleMax = -1
-local vibrationsMax = -1
-local hightMax = -1
-local rpmMax = -1
-local elevatorRateMin = 1e6
-local elevatorRateMax = -1e6
-local aileronRateMin = 1e6
-local aileronRateMax = -1e6
-local rudderRateMin = 1e6
-local rudderRateMax = -1e6
 local value_list_cell_voltages={}
 local value_list_rx_1_voltages={}
 
-local currentTime
 local isRxPoweredOn = false
-local hasRxBeenPoweredOn = false
-local timeAtPowerOn = 0.0
-local timeCounter = 0
+local timeAtPowerOn = 0
 local resetRx = false
-
-local isAlarmCapacityOneActive = false
-local isAlarmCapacityTwoActive = false
-local isAlarmCapacityThreeActive = false
-local isAlarmCapacityFourActive = false
-local isAlarmCapacityFiveActive = false
-local isAlarmCapacitySixActive = false
-
-local resetTelemetryMinMax
-local activateTelemetryMinMax
-
-local voltagePerCell = 0.0
-local voltagePerCellAveraged = 0.0
-local voltagePerCellAtStartup = 0.0
-local voltageSensorValue = 0.0
-local batteryCapacityPercentAtStartup = 0.0
-local batteryCapacityUsedAtStartup = 0.0
-local effectivePercentageAtStartUp = 0.0
-
-local rx_1_Voltage_Averaged = 0.0
-local escCurrent = 0.0
-local escTemp = 0
-local escThrottle = 0
-local vibrations = 0
-local hight = 0
-local rpm = 0
-local batteryCapacityUsed = 0
-local batteryCapacityUsedTotal = 0
-local elevatorRate = 0
-local aileronRate = 0
-local rudderRate = 0
-
-local telemetryActive = false
+local isAlarmUsedLipoDetectedActive = false
 local hasVoltageStartupBeenRead = false
-
-local flightTimerActive = -1
-local resetTimer = -1
-
 local lastTime = 0
 local avgTime = 0
+local flightTimerActive = 0
+local resetTimer = 0
+
+local goregisterTelemetry = nil
+local countSet = 0
+
+local timerVTable = {}
+local isAlarmActive = {}
+
+-- screen variables
+local base_r,base_g,base_b = 0,0,0
+local green_r,green_g,green_b = 0,141,0
+local green_light_r,green_light_g,green_light_b = 103,161,103
+local red_r,red_g,red_b = 255,0,0
+local blue_r,blue_g,blue_b = 0,0,255
+local orange_r,orange_g,orange_b = 255,179,0
+
+local voltage_r,voltage_g,voltage_b = 0,204,255
+local antenna_r,antenna_g,antenna_b = 0,204,0
+local quality_r,quality_g,quality_b = 0,0,255
+
+local max_r,max_g,max_b = 255,0,255
+local min_r,min_g,min_b = 88,0,212
+
+local screenMinX = 0
+local screenMinY = 0
+local screenMaxX = 318
+local screenMaxY = 159
+
+local batterySymbolWidth = 53
+local batterySymbolHeight = 120
+
+local batterySymbolX = screenMaxX*0.5 - batterySymbolWidth*0.5
+local batterySymbolY = screenMaxY - batterySymbolHeight
+
+local batteryTopWidth = batterySymbolWidth*0.5
+local batteryTopHeight = 7
 
 local flightTimeMinutesSecondsString = ""
 local flightTimeTenthsString = ""
-
-local effectiveLipoCapacity = 0
-
-local batteryPercentage=55
-local batteryPercentageRounded=0
-
-local rx_1_Q = 0
-local rx_1_Voltage = 0.0
-local rx_1_RSSI_A1 = 0
-local rx_1_RSSI_A2 = 0
 
 --------------------------------------------------------------------------------------------
 
 local function setLanguage()
     local lng=system.getLocale()
-    print( lng )
+    --print( lng )
     local file = io.readall("Apps/Lang/HeliTelm.jsn")
+    if( file == nil ) then
+    	file = io.readall("Apps/Lang/HeliT_de.jsn")
+    end
     local obj = json.decode(file)
     if(obj) then
-        trans21 = obj[lng] or obj[obj.default]
+        setupvars.trans = obj[lng] or obj[obj.default]
     end
 end
-
-
---------------------------------------------------------------------------------------------
--- Converts voltage reading to a percentage (code from Tero @ RC-Thoughts.com)
---------------------------------------------------------------------------------------------
-local function voltageAsAPercentage(value)
-	
-	local percentList={{3,0},{3.093,1},{3.196,2},{3.301,3},{3.401,4},{3.477,5},{3.544,6},{3.601,7},{3.637,8},{3.664,9},{3.679,10},{3.683,11},{3.689,12},{3.692,13},{3.705,14},{3.71,15},{3.713,16},{3.715,17},{3.72,18},{3.731,19},{3.735,20},{3.744,21},{3.753,22},{3.756,23},{3.758,24},{3.762,25},{3.767,26},{3.774,27},{3.78,28},{3.783,29},{3.786,30},{3.789,31},{3.794,32},{3.797,33},{3.8,34},{3.802,35},{3.805,36},{3.808,37},{3.811,38},{3.815,39},{3.818,40},{3.822,41},{3.825,42},{3.829,43},{3.833,44},{3.836,45},{3.84,46},{3.843,47},{3.847,48},{3.85,49},{3.854,50},{3.857,51},{3.86,52},{3.863,53},{3.866,54},{3.87,55},{3.874,56},{3.879,57},{3.888,58},{3.893,59},{3.897,60},{3.902,61},{3.906,62},{3.911,63},{3.918,64},{3.923,65},{3.928,66},{3.939,67},{3.943,68},{3.949,69},{3.955,70},{3.961,71},{3.968,72},{3.974,73},{3.981,74},{3.987,75},{3.994,76},{4.001,77},{4.007,78},{4.014,79},{4.021,80},{4.029,81},{4.036,82},{4.044,83},{4.052,84},{4.062,85},{4.074,86},{4.085,87},{4.095,88},{4.105,89},{4.111,90},{4.116,91},{4.12,92},{4.125,93},{4.129,94},{4.135,95},{4.145,96},{4.176,97},{4.179,98},{4.193,99},{4.2,100}}
-
-    local result=0
-    if(value > 4.2 or value < 3.00)then
-        if(value > 4.2)then
-            result=100
-        end
-        if(value < 3.00)then
-            result=0
-        end
-        else
-        for index,entry in ipairs(percentList) do
-            if(entry[1] >= value)then
-                result=entry[2]
-                break
-            end
-        end
-    end
-	
-    --collectgarbage()
-	
-    return result
-
-end
---------------------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------------------
--- Functions to save new user input values
---------------------------------------------------------------------------------------------
-local function voltageSensorChanged(value)
-	voltageSensorID = sensorsAvailable[value].id
-	voltageSensorParam = sensorsAvailable[value].param
-	voltageSensorName = sensorsAvailable[value].sensorName
-	voltageSensorLabel = sensorsAvailable[value].label
-	system.pSave("voltageSensorID",voltageSensorID)
-	system.pSave("voltageSensorParam",voltageSensorParam)
-	system.pSave("voltageSensorName",voltageSensorName)
-	system.pSave("voltageSensorLabel",voltageSensorLabel)
-	if (debugOn == true) then
-		print("Voltage sensor",voltageSensorID,voltageSensorParam)
-	end
-end
-
-local function currentSensorChanged(value)
-	currentSensorID = sensorsAvailable[value].id
-	currentSensorParam = sensorsAvailable[value].param
-	system.pSave("currentSensorID",currentSensorID)
-	system.pSave("currentSensorParam",currentSensorParam)
-	if (debugOn == true) then
-		print("Current sensor",currentSensorID,currentSensorParam)
-	end
-end
-
-local function capacitySensorChanged(value)
-	capacitySensorID = sensorsAvailable[value].id
-	capacitySensorParam = sensorsAvailable[value].param
-	system.pSave("capacitySensorID",capacitySensorID)
-	system.pSave("capacitySensorParam",capacitySensorParam)
-	if (debugOn == true) then
-		print("Capacity sensor",capacitySensorID,capacitySensorParam)
-	end
-end
-
-local function temperatureSensorChanged(value)
-	temperatureSensorID = sensorsAvailable[value].id
-	temperatureSensorParam = sensorsAvailable[value].param
-	system.pSave("temperatureSensorID",temperatureSensorID)
-	system.pSave("temperatureSensorParam",temperatureSensorParam)
-	if (debugOn == true) then
-		print("Temperature sensor",temperatureSensorID,temperatureSensorParam)
-	end
-end
-
-local function throttleSensorChanged(value)
-	throttleSensorID = sensorsAvailable[value].id
-	throttleSensorParam = sensorsAvailable[value].param
-	system.pSave("throttleSensorID",throttleSensorID)
-	system.pSave("throttleSensorParam",throttleSensorParam)
-	if (debugOn == true) then
-		print("Throttle sensor",throttleSensorID,throttleSensorParam)
-	end
-end
-
-local function rpmSensorChanged(value)
-	rpmSensorID = sensorsAvailable[value].id
-	rpmSensorParam = sensorsAvailable[value].param
-	system.pSave("rpmSensorID",rpmSensorID)
-	system.pSave("rpmSensorParam",rpmSensorParam)
-	if (debugOn == true) then
-		print("RPM sensor",rpmSensorID,rpmSensorParam)
-	end
-end
-
-local function vibrationsSensorChanged(value)
-	vibrationsSensorID = sensorsAvailable[value].id
-	vibrationsSensorParam = sensorsAvailable[value].param
-	system.pSave("vibrationsSensorID",vibrationsSensorID)
-	system.pSave("vibrationsSensorParam",vibrationsSensorParam)
-	if (debugOn == true) then
-		print("Vibrations sensor",vibrationsSensorID,vibrationsSensorParam)
-	end
-end
-
-local function maltiSensorChanged(value)
-	maltiSensorID = sensorsAvailable[value].id
-	maltiSensorParam = sensorsAvailable[value].param
-	system.pSave("maltiSensorID",maltiSensorID)
-	system.pSave("maltiSensorParam",maltiSensorParam)
-	if (debugOn == true) then
-		print("mAlti sensor",maltiSensorID,maltiSensorParam)
-	end
-end
-
-local function elevatorSensorChanged(value)
-	elevatorSensorID = sensorsAvailable[value].id
-	elevatorSensorParam = sensorsAvailable[value].param
-	system.pSave("elevatorSensorID",elevatorSensorID)
-	system.pSave("elevatorSensorParam",elevatorSensorParam)
-	if (debugOn == true) then
-		print("Elevator sensor",elevatorSensorID,elevatorSensorParam)
-	end
-end
-
-local function aileronSensorChanged(value)
-	aileronSensorID = sensorsAvailable[value].id
-	aileronSensorParam = sensorsAvailable[value].param
-	system.pSave("aileronSensorID",aileronSensorID)
-	system.pSave("aileronSensorParam",aileronSensorParam)
-	if (debugOn == true) then
-		print("Aileron sensor",aileronSensorID,aileronSensorParam)
-	end
-end
-
-local function rudderSensorChanged(value)
-	rudderSensorID = sensorsAvailable[value].id
-	rudderSensorParam = sensorsAvailable[value].param
-	system.pSave("rudderSensorID",rudderSensorID)
-	system.pSave("rudderSensorParam",rudderSensorParam)
-	if (debugOn == true) then
-		print("Rudder sensor",rudderSensorID,rudderSensorParam)
-	end
-end
-
-local function lipoCellCountChanged(value)
-	lipoCellCount = value
-	system.pSave("lipoCellCount",value)
-	if (debugOn == true) then
-		print("Lipo cell count ",value)
-	end
-end
-
-local function lipoCapacityChanged(value)
-	lipoCapacity = value
-	system.pSave("lipoCapacity",value)
-	if (debugOn == true) then
-		print("Lipo capacity ",value)
-	end
-end
-
-local function correctionFactorChanged(value)
-	correctionFactor = value
-	system.pSave("correctionFactor",value)
-	if (debugOn == true) then
-		print("Correction factor  ",value)
-	end
-end
-
-local function estimateUsedLipoBooleanChanged(value)
-	estimateUsedLipoBoolean = not value
-	form.setValue(checkboxIndex1,estimateUsedLipoBoolean)
-	if (estimateUsedLipoBoolean == true) then
-		estimateUsedLipo = 1
-		system.pSave("estimateUsedLipo",estimateUsedLipo)
-	else
-		estimateUsedLipo = 0
-		system.pSave("estimateUsedLipo",estimateUsedLipo)
-	end
-	if (debugOn == true) then
-		print("estimateUsedLipo ",estimateUsedLipo,estimateUsedLipoBoolean)
-	end
-end
-
-local function voltageThresholdUsedLipoChanged(value)
-	voltageThresholdUsedLipo = value
-	system.pSave("voltageThresholdUsedLipo",value)
-	if (debugOn == true) then
-		print("voltageThresholdUsedLipo ",voltageThresholdUsedLipo)
-	end
-end
-
-local function alarmUsedLipoDetectedFileChanged(value)
-	alarmUsedLipoDetectedFile = value
-	system.pSave("alarmUsedLipoDetectedFile",value)
-	if (debugOn == true) then
-		print("alarmUsedLipoDetectedFile ",alarmUsedLipoDetectedFile)
-	end
-end
-
-local function timeDelayChanged(value)
-	timeDelay = value
-	system.pSave("timeDelay",value)
-	if (debugOn == true) then
-		print("timeDelay ",timeDelay)
-	end
-end
-
-local function averagingWindowCellVoltageChanged(value)
-	averagingWindowCellVoltage = value
-	system.pSave("averagingWindowCellVoltage",value)
-	if (debugOn == true) then
-		print("averagingWindowCellVoltage ",averagingWindowCellVoltage)
-	end
-end
-
-local function averagingWindowRxVoltageChanged(value)
-	averagingWindowRxVoltage = value
-	system.pSave("averagingWindowRxVoltage",value)
-	if (debugOn == true) then
-		print("averagingWindowRxVoltage ",averagingWindowRxVoltage)
-	end
-end
-
-local function switchStartTimerChanged(value)
-	switchStartTimer = value
-	system.pSave("switchStartTimer",value)
-	if (debugOn == true) then
-		print("switchStartTimer ",switchStartTimer)
-	end
-end
-
-local function switchResetTimerChanged(value)
-	switchResetTimer = value
-	system.pSave("switchResetTimer",value)
-	if (debugOn == true) then
-		print("switchResetTimer ",switchResetTimer)
-	end
-end
-
-local function switchActivateTelemetryMinMaxChanged(value)
-	switchActivateTelemetryMinMax = value
-	system.pSave("switchActivateTelemetryMinMax",value)
-	if (debugOn == true) then
-		print("switchActivateTelemetryMinMax ",switchActivateTelemetryMinMax)
-	end
-end
-
-local function switchResetTelemetryMinMaxChanged(value)
-	switchResetTelemetryMinMax = value
-	system.pSave("switchResetTelemetryMinMax",value)
-	if (debugOn == true) then
-		print("switchResetTelemetryMinMax ",switchResetTelemetryMinMax)
-	end
-end
-
-local function alarmCapacityLevelOneChanged(value)
-	alarmCapacityLevelOne = value
-	system.pSave("alarmCapacityLevelOne",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelOne ",alarmCapacityLevelOne)
-	end
-end
-
-local function alarmCapacityLevelTwoChanged(value)
-	alarmCapacityLevelTwo = value
-	system.pSave("alarmCapacityLevelTwo",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelTwo ",alarmCapacityLevelTwo)
-	end
-end
-
-local function alarmCapacityLevelThreeChanged(value)
-	alarmCapacityLevelThree = value
-	system.pSave("alarmCapacityLevelThree",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelThree ",alarmCapacityLevelThree)
-	end
-end
-
-local function alarmCapacityLevelFourChanged(value)
-	alarmCapacityLevelFour = value
-	system.pSave("alarmCapacityLevelFour",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelFour ",alarmCapacityLevelFour)
-	end
-end
-
-local function alarmCapacityLevelFiveChanged(value)
-	alarmCapacityLevelFive = value
-	system.pSave("alarmCapacityLevelFive",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelFive ",alarmCapacityLevelFive)
-	end
-end
-
-local function alarmCapacityLevelSixChanged(value)
-	alarmCapacityLevelSix = value
-	system.pSave("alarmCapacityLevelSix",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelSix ",alarmCapacityLevelSix)
-	end
-end
-
-local function alarmCapacityLevelOneFileChanged(value)
-	alarmCapacityLevelOneFile = value
-	system.pSave("alarmCapacityLevelOneFile",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelOneFile ",alarmCapacityLevelOneFile)
-	end
-end
-
-local function alarmCapacityLevelTwoFileChanged(value)
-	alarmCapacityLevelTwoFile = value
-	system.pSave("alarmCapacityLevelTwoFile",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelTwoFile ",alarmCapacityLevelTwoFile)
-	end
-end
-
-local function alarmCapacityLevelThreeFileChanged(value)
-	alarmCapacityLevelThreeFile = value
-	system.pSave("alarmCapacityLevelThreeFile",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelThreeFile ",alarmCapacityLevelThreeFile)
-	end
-end
-
-local function alarmCapacityLevelFourFileChanged(value)
-	alarmCapacityLevelFourFile = value
-	system.pSave("alarmCapacityLevelFourFile",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelFourFile ",alarmCapacityLevelFourFile)
-	end
-end
-
-local function alarmCapacityLevelFiveFileChanged(value)
-	alarmCapacityLevelFiveFile = value
-	system.pSave("alarmCapacityLevelFiveFile",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelFiveFile ",alarmCapacityLevelFiveFile)
-	end
-end
-
-local function alarmCapacityLevelSixFileChanged(value)
-	alarmCapacityLevelSixFile = value
-	system.pSave("alarmCapacityLevelSixFile",value)
-	if (debugOn == true) then
-		print("alarmCapacityLevelSixFile ",alarmCapacityLevelSixFile)
-	end
-end
-
-local function lowVoltageChirpBooleanChanged(value)
-	lowVoltageChirpBoolean = not value
-	form.setValue(checkboxIndex2,lowVoltageChirpBoolean)
-	if (lowVoltageChirpBoolean == true) then
-		lowVoltageChirp = 1
-		system.pSave("lowVoltageChirp",lowVoltageChirp)
-	else
-		lowVoltageChirp = 0
-		system.pSave("lowVoltageChirp",lowVoltageChirp)
-	end
-	if (debugOn == true) then
-		print("lowVoltageChirp ",lowVoltageChirp,lowVoltageChirpBoolean)
-	end
-end
-
-local function alarmVoltageLevelOneChanged(value)
-	alarmVoltageLevelOne = value
-	system.pSave("alarmVoltageLevelOne",value)
-	if (debugOn == true) then
-		print("alarmVoltageLevelOne ",alarmVoltageLevelOne)
-	end
-end
-
-local function actTimeChanged(value)
-    local pSave = system.pSave
-	actTime = value
-	pSave("actTime", value)
-	if (debugOn == true) then
-		print("actTime ",actTime)
-	end
-end
-
-local function flightCountChanged(value)
-    local pSave = system.pSave
-	flightCount = value
-	pSave("flightCount", value)
-	if (debugOn == true) then
-		print("flightCount ",flightCount)
-	end
-end
-
---------------------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------------------
--- Function that creates user input form
---------------------------------------------------------------------------------------------
-local function initForm(formID)
-	
-	local available = system.getSensors()
-
-	local selectionList={}
-	sensorsAvailable = {}
-
-	local voltageCurrentIndex = -1
-	local currentCurrentIndex = -1
-	local capacityCurrentIndex = -1
-	local temperatureCurrentIndex = -1
-	local throttleCurrentIndex = -1
-	local rpmCurrentIndex = -1
-	local vibrationsCurrentIndex = -1
-	local maltiCurrentIndex = -1
-	local elevatorCurrentIndex = -1
-	local aileronCurrentIndex = -1
-	local rudderCurrentIndex = -1
-		
-	selectionList[#selectionList + 1] = string.format("%s","Jeti - Rx1 Voltage")
-	sensorsAvailable[#sensorsAvailable + 1] = {["unit"] = "V",["param"] = 1,["id"] = 999,["sensorName"] = "Jeti",["label"] = "Rx1 Voltage"}
-
-	selectionList[#selectionList + 1] = string.format("%s","Jeti - Rx2 Voltage")
-	sensorsAvailable[#sensorsAvailable + 1] = {["unit"] = "V",["param"] = 2,["id"] = 999,["sensorName"] = "Jeti",["label"] = "Rx2 Voltage"}
-		
-	selectionList[#selectionList + 1] = string.format("%s","Jeti - RxB Voltage")
-	sensorsAvailable[#sensorsAvailable + 1] = {["unit"] = "V",["param"] = 3,["id"] = 999,["sensorName"] = "Jeti",["label"] = "RxB Voltage"}
-	
-	if (voltageSensorID == 999 and voltageSensorParam == 1) then
-		voltageCurrentIndex = 1
-	elseif (voltageSensorID == 999 and voltageSensorParam == 2) then
-		voltageCurrentIndex = 2
-	elseif (voltageSensorID == 999 and voltageSensorParam == 3) then
-		voltageCurrentIndex = 3
-	end
-	
-	for index,sensor in ipairs(available) do 
-		if(sensor.param ~= 0) then 
-			if(sensor.sensorName and string.len(sensor.sensorName) > 0) then
-				selectionList[#selectionList + 1] = string.format("%s - %s [%s]",sensor.sensorName,sensor.label,sensor.unit)
-			else
-				selectionList[#selectionList + 1] = string.format("%s [%s]",sensor.label,sensor.unit)
-			end
-			
-			sensorsAvailable[#sensorsAvailable + 1] = sensor
-						
-			if(sensor.id == voltageSensorID and sensor.param == voltageSensorParam) then
-				voltageCurrentIndex = #sensorsAvailable
-			end
-			if(sensor.id == currentSensorID and sensor.param == currentSensorParam) then
-				currentCurrentIndex = #sensorsAvailable
-			end
-			if(sensor.id == capacitySensorID and sensor.param == capacitySensorParam) then
-				capacityCurrentIndex = #sensorsAvailable
-			end
-			if(sensor.id == temperatureSensorID and sensor.param == temperatureSensorParam) then
-				temperatureCurrentIndex = #sensorsAvailable
-			end
-			if(sensor.id == throttleSensorID and sensor.param == throttleSensorParam) then
-				throttleCurrentIndex = #sensorsAvailable
-			end
-			if(sensor.id == rpmSensorID and sensor.param == rpmSensorParam) then
-				rpmCurrentIndex = #sensorsAvailable
-			end
-			if(sensor.id == vibrationsSensorID and sensor.param == vibrationsSensorParam) then
-				vibrationsCurrentIndex = #sensorsAvailable
-			end
-			if(sensor.id == maltiSensorID and sensor.param == maltiSensorParam) then
-				maltiCurrentIndex = #sensorsAvailable
-			end
-			if(sensor.id == elevatorSensorID and sensor.param == elevatorSensorParam) then
-				elevatorCurrentIndex = #sensorsAvailable
-			end
-			if(sensor.id == aileronSensorID and sensor.param == aileronSensorParam) then
-				aileronCurrentIndex = #sensorsAvailable
-			end
-			if(sensor.id == rudderSensorID and sensor.param == rudderSensorParam) then
-				rudderCurrentIndex = #sensorsAvailable
-			end
-		end
-	end
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.sensors,font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=240})
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.voltage,font=FONT_NORMAL,width=170})
-	form.addSelectbox(selectionList,voltageCurrentIndex,true,voltageSensorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.capacity,font=FONT_NORMAL,width=170})
-	form.addSelectbox(selectionList,capacityCurrentIndex,true,capacitySensorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.current,font=FONT_NORMAL,width=170})
-	form.addSelectbox(selectionList,currentCurrentIndex,true,currentSensorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.temp,font=FONT_NORMAL,width=170})
-	form.addSelectbox(selectionList,temperatureCurrentIndex,true,temperatureSensorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.throttle,font=FONT_NORMAL,width=170})
-	form.addSelectbox(selectionList,throttleCurrentIndex,true,throttleSensorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.rpm,font=FONT_NORMAL,width=170})
-	form.addSelectbox(selectionList,rpmCurrentIndex,true,rpmSensorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.height,font=FONT_NORMAL,width=170})
-	form.addSelectbox(selectionList,maltiCurrentIndex,true,maltiSensorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.vibrations,font=FONT_NORMAL,width=170})
-	form.addSelectbox(selectionList,vibrationsCurrentIndex,true,vibrationsSensorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.elevator,font=FONT_NORMAL,width=170})
-	form.addSelectbox(selectionList,elevatorCurrentIndex,true,elevatorSensorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.aileron,font=FONT_NORMAL,width=170})
-	form.addSelectbox(selectionList,aileronCurrentIndex,true,aileronSensorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.rudder,font=FONT_NORMAL,width=170})
-	form.addSelectbox(selectionList,rudderCurrentIndex,true,rudderSensorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.options,font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=200})
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.cellCount,font=FONT_NORMAL,width=200})
-	form.addIntbox(lipoCellCount,1,99,1,0,1,lipoCellCountChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.nominalCapacity,font=FONT_NORMAL,width=210})
-	form.addIntbox(lipoCapacity,0,10000,0,0,50,lipoCapacityChanged)
-		
-	form.addRow(2)
-	form.addLabel({label=trans21.corrFactor,font=FONT_NORMAL,width=200})
-	form.addIntbox(correctionFactor,1,2000,1000,3,1,correctionFactorChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.usedLipo,font=FONT_NORMAL,width=230})
-	checkboxIndex1 = form.addCheckbox(estimateUsedLipoBoolean,estimateUsedLipoBooleanChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.voltageThreshold,font=FONT_NORMAL,width=230})
-	form.addIntbox(voltageThresholdUsedLipo,0,420,330,2,1,voltageThresholdUsedLipoChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.usedLipoAnnouncement,font=FONT_NORMAL,width=160})
-	form.addAudioFilebox(alarmUsedLipoDetectedFile,alarmUsedLipoDetectedFileChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.fblInitDelay,font=FONT_NORMAL,width=230})
-	form.addIntbox(timeDelay,0,100,0,0,1,timeDelayChanged)
-
-	form.addRow(2)
-	form.addLabel({label=trans21.samples,font=FONT_NORMAL,width=240})
-	form.addIntbox(averagingWindowCellVoltage,1,99,1,0,1,averagingWindowCellVoltageChanged)
-	
-	form.addRow(1)
-	form.addLabel({label=trans21.hint1,font=FONT_NORMAL})
-	form.addRow(1)
-	form.addLabel({label=trans21.hint2,font=FONT_NORMAL})
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryAnnouncements,font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=250})
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel1,font=FONT_NORMAL,width=225})
-	form.addIntbox(alarmCapacityLevelOne,0,100,1,0,1,alarmCapacityLevelOneChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel1Announcement,font=FONT_NORMAL,width=150})
-	form.addAudioFilebox(alarmCapacityLevelOneFile,alarmCapacityLevelOneFileChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel2,font=FONT_NORMAL,width=225})
-	form.addIntbox(alarmCapacityLevelTwo,0,100,1,0,1,alarmCapacityLevelTwoChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel2Announcement,font=FONT_NORMAL,width=150})
-	form.addAudioFilebox(alarmCapacityLevelTwoFile,alarmCapacityLevelTwoFileChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel3,font=FONT_NORMAL,width=225})
-	form.addIntbox(alarmCapacityLevelThree,0,100,1,0,1,alarmCapacityLevelThreeChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel3Announcement,font=FONT_NORMAL,width=150})
-	form.addAudioFilebox(alarmCapacityLevelThreeFile,alarmCapacityLevelThreeFileChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel4,font=FONT_NORMAL,width=225})
-	form.addIntbox(alarmCapacityLevelFour,0,100,1,0,1,alarmCapacityLevelFourChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel4Announcement,font=FONT_NORMAL,width=150})
-	form.addAudioFilebox(alarmCapacityLevelFourFile,alarmCapacityLevelFourFileChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel5,font=FONT_NORMAL,width=225})
-	form.addIntbox(alarmCapacityLevelFive,0,100,1,0,1,alarmCapacityLevelFiveChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel5Announcement,font=FONT_NORMAL,width=150})
-	form.addAudioFilebox(alarmCapacityLevelFiveFile,alarmCapacityLevelFiveFileChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel6,font=FONT_NORMAL,width=225})
-	form.addIntbox(alarmCapacityLevelSix,0,100,1,0,1,alarmCapacityLevelSixChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.batteryLevel6Announcement,font=FONT_NORMAL,width=150})
-	form.addAudioFilebox(alarmCapacityLevelSixFile,alarmCapacityLevelSixFileChanged)
-	
-	-- if lowVoltageChirp == 1 then
-		-- lowVoltageChirpBoolean = true
-	-- else
-		-- lowVoltageChirpBoolean = false
-	-- end
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.chirp,font=FONT_NORMAL,width=230})
-	checkboxIndex2 = form.addCheckbox(lowVoltageChirpBoolean,lowVoltageChirpBooleanChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.lowThreshold,font=FONT_NORMAL,width=220})
-	form.addIntbox(alarmVoltageLevelOne,0,420,330,2,5,alarmVoltageLevelOneChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.switches,font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=200})
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.startTimer,font=FONT_NORMAL,width=200})
-	form.addInputbox(switchStartTimer,true,switchStartTimerChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.resetTimer,font=FONT_NORMAL,width=200})
-	form.addInputbox(switchResetTimer,true,switchResetTimerChanged)
-	
-	form.addRow(2)
-	form.addLabel({label=trans21.activateMaxMin,font=FONT_NORMAL,width=230})
-	form.addInputbox(switchActivateTelemetryMinMax,true,switchActivateTelemetryMinMaxChanged)
-
-	form.addRow(2)
-	form.addLabel({label=trans21.flightCounter,font=FONT_BOLD,alignRight=false,enabled=false,visible=true,width=250})
-	
-    form.addRow(2)
-    form.addLabel({label=trans21.actTime, width=220})
-    form.addIntbox(actTime, 1, 600, 0, 0, 1, actTimeChanged)
-
-	form.addRow(2)
-	form.addLabel({label=trans21.flightCount,font=FONT_NORMAL,width=220})
-    form.addIntbox(flightCount, -0, 10000, 0, 0, 1, flightCountChanged)
-
-	
-	--collectgarbage()
-end
---------------------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------------------
--- Function resets telemetry min/max values
---------------------------------------------------------------------------------------------
-local function resetTelemetryValues()
-	minVoltagePerCell = 99.9
-	maxVoltagePerCell = -1.0
-	rx_1_Q_min = 101
-	rx_1_RSSI_A1_min = 1000
-	rx_1_RSSI_A2_min = 1000
-	rx_1_Voltage_min = 99.9
-	rx_1_Voltage_max = -1.0
-	escCurrentMax = -1.0
-	escTempMax = -1
-	escThrottleMax = -1
-	vibrationsMax = -1
-	hightMax = -1
-	rpmMax = -1
-	elevatorRateMin = 1e6
-	elevatorRateMax = -1e6
-	aileronRateMin = 1e6
-	aileronRateMax = -1e6
-	rudderRateMin = 1e6
-	rudderRateMax = -1e6
-	value_list_cell_voltages={}
-	value_list_rx_1_voltages={}
-end
---------------------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------------------
--- Function that tracks Tx time counter, and saves the time at which the Rx is detected.
--- This allows the app to apply the user defined time delay, as well reset the min/max
--- values when a new lipo is plugged in. (Called by the Jeti loop function).
---------------------------------------------------------------------------------------------
-local function trackTimeAndResetValues()
-
-	currentTime = system.getTimeCounter() * 1E-3
-	
-	local sensorsRx = system.getTxTelemetry()
-	--local voltageSensorValue
-	
-	
-	
-	if(sensorsRx.rx1Percent > 1) then
-		isRxPoweredOn = true
-    else
-		isRxPoweredOn = false
-    end
-	
-	if (hasRxBeenPoweredOn == false and isRxPoweredOn == true) then
-		timeAtPowerOn = currentTime
-		timeCounter = 0
-	end
-	
-	
-	if(isRxPoweredOn == true) then
-		hasRxBeenPoweredOn = true
-     end
-			
-	if (hasRxBeenPoweredOn == true and isRxPoweredOn == false) then
-		resetRx = true
-	end
-		
-	if (resetRx == true)  then
-		if (isRxPoweredOn == true) then
-			resetRx = false
-			hasVoltageStartupBeenRead = false
-			timeAtPowerOn = currentTime
-			timeCounter = 0
-			resetTelemetryValues()
-			isAlarmUsedLipoDetectedActive = false
-			isAlarmCapacityOneActive = false
-			isAlarmCapacityTwoActive = false
-			isAlarmCapacityThreeActive = false
-			isAlarmCapacityFourActive = false 
-			isAlarmCapacityFiveActive = false
-			isAlarmCapacitySixActive = false 
-		end
-	end
-	
-	resetTelemetryMinMax = system.getInputsVal(switchResetTelemetryMinMax)
-	activateTelemetryMinMax = system.getInputsVal(switchActivateTelemetryMinMax)
-	
-	if (isRxPoweredOn == false) then
-		voltagePerCell = 0.0
-		voltagePerCellAveraged = 0.0
-		voltagePerCellAtStartup = 0.0
-		batteryCapacityPercentAtStartup = 0.0
-		batteryCapacityUsedAtStartup = 0.0
-		rx_1_Voltage_Averaged = 0.0
-		escCurrent = 0.0
-		escTemp = 0
-		escThrottle = 0
-		vibrations = 0
-		hight = 0
-		rpm = 0.0
-	end
-	
-	if (isRxPoweredOn == true) and (currentTime > (timeAtPowerOn + timeDelay)) then
-		telemetryActive = true
-	else
-		telemetryActive = false
-    end
-	
-	effectiveLipoCapacity = 0.8 * lipoCapacity
-	
-	if (telemetryActive == true) and (hasVoltageStartupBeenRead == false) then
-		if(voltageSensorID == 999) then
-			if (voltageSensorParam == 1) then
-				voltageSensorValue = sensorsRx.rx1Voltage
-			elseif (voltageSensorParam == 2) then
-				voltageSensorValue = sensorsRx.rx2Voltage
-			elseif (voltageSensorParam == 3) then
-				voltageSensorValue = sensorsRx.rxBVoltage
-			end
-		else
-			voltageSensorTable = system.getSensorByID(voltageSensorID,voltageSensorParam)
-			if (voltageSensorTable) then
-				voltageSensorValue = voltageSensorTable.value
-			end
-		end
-		
-		if (voltageSensorValue) then
-			voltagePerCellAtStartup = (voltageSensorValue * (correctionFactor/1000))/ lipoCellCount
-			print( string.format("voltageSensorValue: %4.2f",voltageSensorValue) )
-			print( string.format("voltagePerCellAtStartup: %4.2f", voltagePerCellAtStartup) )
-			batteryCapacityPercentAtStartup = voltageAsAPercentage(voltagePerCellAtStartup)
-			batteryCapacityUsedAtStartup = lipoCapacity - (lipoCapacity * (batteryCapacityPercentAtStartup/100))
-			effectivePercentageAtStartUp = (1-(batteryCapacityUsedAtStartup / effectiveLipoCapacity))*100
-			if (debugOn == true) then
-				print("lipoCapacity ",lipoCapacity)
-				print("effectiveLipoCapacity ",effectiveLipoCapacity)
-				print("voltagePerCellAtStartup ",voltagePerCellAtStartup)
-				print("batteryCapacityPercentAtStartup ",batteryCapacityPercentAtStartup)
-				print("batteryCapacityUsedAtStartup ",batteryCapacityUsedAtStartup)
-				print("effectivePercentageAtStartUp ",effectivePercentageAtStartUp)
-			end
-		end
-		
-		hasVoltageStartupBeenRead = true
-
-    end
-	
-	local effectivePercentageAtStartUpRounded = math.floor(effectivePercentageAtStartUp + 0.5)
-	
-	if (telemetryActive == true and isAlarmUsedLipoDetectedActive == false and alarmUsedLipoDetectedFile~="" and estimateUsedLipoBoolean == true and voltagePerCellAtStartup < (voltageThresholdUsedLipo/100)) then
-		system.playFile(alarmUsedLipoDetectedFile,AUDIO_QUEUE)
-		system.playNumber(effectivePercentageAtStartUpRounded,0,"%")
-		system.vibration(true,4)
-		isAlarmUsedLipoDetectedActive=true   
-	end
-	
-	if (estimateUsedLipoBoolean == false) then
-		effectivePercentageAtStartUp = 100
-	end
-	
-	if (resetTelemetryMinMax == 1) then
-		telemetryActive = false
-		resetTelemetryValues()
-	end
-	
-	flightTimerActive = system.getInputsVal(switchStartTimer)
-	resetTimer = system.getInputsVal(switchResetTimer)
-
-
-	local delta = currentTime - lastTime
-	lastTime = currentTime
-	
-	if (avgTime == 0) then 
-		avgTime = delta
-	else 
-		avgTime = avgTime * 0.95 + delta * 0.05
-	end
-	
-	if (flightTimerActive == 1) then
-		timeCounter = timeCounter + delta
-	else
-		timeCounter = timeCounter
-	end
-
-    if (timeCounter >= actTime) and countSet == 0 then
-        flightCount = flightCount + 1
-        system.pSave("flightCount", flightCount)
-        countSet = 1
-    end
-	
-	if (resetTimer == 1) then
-		timeCounter = 0
-	    countSet = 0
-	end	
-	
-	--local hh = (tenths // (60 * 60)) % 24
-	local mm = (timeCounter // (60)) % 60
-	local ss = (timeCounter // 1) % 60
-	local t = (timeCounter // 0.1) % 10
-
-	flightTimeMinutesSecondsString = string.format("%02d:%02d", mm, ss)
-	flightTimeTenthsString = string.format(".%01d", t)
-
-	--collectgarbage()
-end
-------------------------------------------------------------------------------------------
-
 
 --------------------------------------------------------------------------------------------
 -- Function that converts dB to Jeti antenna fractions in format of X/9.
@@ -1116,554 +183,52 @@ end
 local function getRSSI(value)
 	local result
 	if     (value > 999) then result = 999
-	elseif (value > 34) then result = 9
-	elseif (value > 27) then result = 8
-	elseif (value > 22) then result = 7
-	elseif (value > 18) then result = 6
-	elseif (value > 14) then result = 5
-	elseif (value > 10) then result = 4
-	elseif (value >  6) then result = 3
-	elseif (value >  3) then result = 2
-	elseif (value >  0) then result = 1
-	else                     result = 0
+	elseif (value > 34)  then result = 9
+	elseif (value > 27)  then result = 8
+	elseif (value > 22)  then result = 7
+	elseif (value > 18)  then result = 6
+	elseif (value > 14)  then result = 5
+	elseif (value > 10)  then result = 4
+	elseif (value >  6)  then result = 3
+	elseif (value >  3)  then result = 2
+	elseif (value >  0)  then result = 1
+	else                      result = 0
 	end
 	return result
 end
 ------------------------------------------------------------------------------------------
 
-
 --------------------------------------------------------------------------------------------
--- Function that averages the voltage reading (if desired by the user).
+-- Function that return the color for text/filling depending on Battery level
 --------------------------------------------------------------------------------------------
-local function averagingFunctionVoltage(value)
-    local sum_values = 0.0
-	local result
-	
-	if (#value_list_cell_voltages == (averagingWindowCellVoltage)) then
-		table.remove(value_list_cell_voltages,1)
-	end    
-	value_list_cell_voltages[#value_list_cell_voltages + 1] = value
-	for i,entry in pairs(value_list_cell_voltages) do
-		sum_values = sum_values + entry
+local function getBatteryLevel()
+	if( setupvars.telemetryActive == true and setupvars.hasRxBeenPoweredOn == true and setupvars.batteryPercentageRounded < setupvars.alarmCapacityLevelTwo and setupvars.batteryPercentageRounded >= setupvars.alarmCapacityLevelFour) then -- and setupvars.batteryCapacityUsedTotal > 0) then
+		return orange_r,orange_g,orange_b
+	elseif (setupvars.telemetryActive == true and setupvars.hasRxBeenPoweredOn == true and setupvars.batteryPercentageRounded < setupvars.alarmCapacityLevelFour) then 
+		return red_r,red_g,red_b
+	elseif (setupvars.telemetryActive == true and setupvars.hasRxBeenPoweredOn == true and setupvars.batteryPercentageRounded >= setupvars.alarmCapacityLevelTwo) then
+		return green_r,green_g,green_b
 	end
-	result = sum_values / #value_list_cell_voltages
-	return result
-end    
---------------------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------------------
--- Function that averages the Rx voltage reading (if desired by the user).
---------------------------------------------------------------------------------------------
-local function averagingFunctionRxVoltage(value)
-	averagingWindowRxVoltage = averagingWindowCellVoltage
-	local sum_values = 0.0
-	local result
-	if (#value_list_rx_1_voltages == (averagingWindowRxVoltage)) then
-		table.remove(value_list_rx_1_voltages,1)
-	end    
-	value_list_rx_1_voltages[#value_list_rx_1_voltages + 1] = value
-	for i,entry in pairs(value_list_rx_1_voltages) do
-		sum_values = sum_values + entry
-	end
-	result = sum_values / #value_list_rx_1_voltages
-	return result
-end    
---------------------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------------------
--- Main function that reads the voltage reading (called by the Jeti loop function).
---------------------------------------------------------------------------------------------
-local function updateTelemetrySensors()
-
-	local voltageSensorTable
-	local currentSensorTable
-	local capacitySensorTable
-	local temperatureSensorTable
-	local throttleSensorTable
-	local vibrationsSensorTable
-	local maltiSensorTable
-	local rpmSensorTable
-	local elevatorSensorTable
-	local aileronSensorTable
-	local rudderSensorTable
-	
-	--local voltageSensorValue
-	
-	if(voltageSensorID == 999) then
-	
-		local sensorsRx = system.getTxTelemetry()
-		
-		if (voltageSensorParam == 1) then
-			voltageSensorValue = sensorsRx.rx1Voltage
-		elseif (voltageSensorParam == 2) then
-			voltageSensorValue = sensorsRx.rx2Voltage
-		elseif (voltageSensorParam == 3) then
-			voltageSensorValue = sensorsRx.rxBVoltage
-		end
-		
-	else
-
-		voltageSensorTable = system.getSensorByID(voltageSensorID,voltageSensorParam)
-		if (voltageSensorTable) then
-			voltageSensorValue = voltageSensorTable.value
-		end
-		
-	end
-		
-	currentSensorTable = system.getSensorByID(currentSensorID,currentSensorParam)
-	if (currentSensorTable) then
-		escCurrent = currentSensorTable.value
-	end
-	
-	capacitySensorTable = system.getSensorByID(capacitySensorID,capacitySensorParam)
-	if (capacitySensorTable) then
-		batteryCapacityUsed = capacitySensorTable.value
-	end
-	
-	temperatureSensorTable = system.getSensorByID(temperatureSensorID,temperatureSensorParam)
-	if (temperatureSensorTable) then
-		escTemp = temperatureSensorTable.value
-	end
-	
-	throttleSensorTable = system.getSensorByID(throttleSensorID,throttleSensorParam)
-	if (throttleSensorTable) then
-		escThrottle = throttleSensorTable.value
-	end
-	
-	vibrationsSensorTable = system.getSensorByID(vibrationsSensorID,vibrationsSensorParam)
-	if (vibrationsSensorTable) then
-		vibrations = vibrationsSensorTable.value
-	end
-	
-	maltiSensorTable = system.getSensorByID(maltiSensorID,maltiSensorParam)
-	if (maltiSensorTable) then
-		hight = maltiSensorTable.value
-	end
-	
-	rpmSensorTable = system.getSensorByID(rpmSensorID,rpmSensorParam)
-	if (rpmSensorTable) then
-		rpm = rpmSensorTable.value
-	end
-	
-	elevatorSensorTable = system.getSensorByID(elevatorSensorID,elevatorSensorParam)
-	if (elevatorSensorTable) then
-		elevatorRate = elevatorSensorTable.value
-	end
-	
-	aileronSensorTable = system.getSensorByID(aileronSensorID,aileronSensorParam)
-	if (aileronSensorTable) then
-		aileronRate = aileronSensorTable.value
-	end
-	
-	rudderSensorTable = system.getSensorByID(rudderSensorID,rudderSensorParam)
-	if (rudderSensorTable) then
-		rudderRate = rudderSensorTable.value
-	end
-	
-	
-	if (voltageSensorValue) then
-		voltagePerCell = (voltageSensorValue * (correctionFactor/1000))/ lipoCellCount
-		voltagePerCellAveraged = averagingFunctionVoltage(voltagePerCell)
-	end
-	
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and voltagePerCellAveraged < minVoltagePerCell and voltagePerCell > 0.1) then
-		minVoltagePerCell = voltagePerCellAveraged
-	end
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and voltagePerCellAveraged > maxVoltagePerCell and voltagePerCell > 0.1) then
-		maxVoltagePerCell = voltagePerCellAveraged
-	end
-	
-	
-	if (estimateUsedLipoBoolean == true and voltagePerCellAtStartup < (voltageThresholdUsedLipo/100)) then
-		batteryCapacityUsedTotal = batteryCapacityUsedAtStartup + batteryCapacityUsed
-	else
-		batteryCapacityUsedTotal = batteryCapacityUsed
-	end
-	
-	if (batteryCapacityUsed and effectiveLipoCapacity) then
-		if (batteryCapacityUsedTotal > effectiveLipoCapacity) then
-			batteryPercentage = 0
-		else
-			batteryPercentage = (1 - (batteryCapacityUsedTotal / effectiveLipoCapacity))*100
-		end
-	end
-
-	batteryPercentageRounded = math.floor(batteryPercentage + 0.5)
-		
-	if (telemetryActive and activateTelemetryMinMax == 1 and escCurrent > escCurrentMax) then
-		escCurrentMax = escCurrent
-	end
-		
-	if (telemetryActive and activateTelemetryMinMax == 1 and escTemp > escTempMax) then
-		escTempMax = escTemp
-	end
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and escThrottle > escThrottleMax) then
-		escThrottleMax = escThrottle
-	end
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and vibrations > vibrationsMax) then
-		vibrationsMax = vibrations
-	end
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and hight > hightMax) then
-		hightMax = hight
-	end
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and rpm > rpmMax) then
-		rpmMax = rpm
-	end
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and elevatorRate < elevatorRateMin) then
-		elevatorRateMin = elevatorRate
-	elseif (telemetryActive and activateTelemetryMinMax == 1 and elevatorRate > elevatorRateMax) then
-		elevatorRateMax = elevatorRate
-	end
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and aileronRate < aileronRateMin) then
-		aileronRateMin = aileronRate
-	elseif (telemetryActive and activateTelemetryMinMax == 1 and aileronRate > aileronRateMax) then
-		aileronRateMax = aileronRate
-	end
-
-	if (telemetryActive and activateTelemetryMinMax == 1 and rudderRate < rudderRateMin) then
-		rudderRateMin = rudderRate
-	elseif (telemetryActive and activateTelemetryMinMax == 1 and rudderRate > rudderRateMax) then
-		rudderRateMax = rudderRate
-	end
-
-	
-	--collectgarbage()
-	
-	--local mem = collectgarbage('count')
-	--print("Memory usage: ", mem)
-	
-end
---------------------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------------------
--- Function to update Rx telemetry values
---------------------------------------------------------------------------------------------
-local function updateRxValues()
-
-	local sensorsRx = system.getTxTelemetry()
-	
-	if (sensorsRx) then
-		rx_1_Q = sensorsRx.rx1Percent
-		rx_1_Voltage = sensorsRx.rx1Voltage
-		rx_1_RSSI_A1 = sensorsRx.RSSI[1]
-		rx_1_RSSI_A2 = sensorsRx.RSSI[2]
-	end
-	
-	if (telemetryActive == false and isRxPoweredOn == true) then
-		rx_1_Voltage_Averaged = rx_1_Voltage
-	elseif (telemetryActive == true) then
-		rx_1_Voltage_Averaged = averagingFunctionRxVoltage(rx_1_Voltage)
-	end
-
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and rx_1_Q < rx_1_Q_min) then
-		rx_1_Q_min = rx_1_Q
-	end
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and rx_1_Voltage_Averaged < rx_1_Voltage_min) then
-		rx_1_Voltage_min = rx_1_Voltage_Averaged
-	end
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and rx_1_Voltage_Averaged > rx_1_Voltage_max) then
-		rx_1_Voltage_max = rx_1_Voltage_Averaged
-	end
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and rx_1_RSSI_A1 < rx_1_RSSI_A1_min) then
-		rx_1_RSSI_A1_min = rx_1_RSSI_A1
-	end
-	
-	if (telemetryActive and activateTelemetryMinMax == 1 and rx_1_RSSI_A2 < rx_1_RSSI_A2_min) then
-		rx_1_RSSI_A2_min = rx_1_RSSI_A2
-	end	
-
-end
---------------------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------------------
--- Audible alarm function
---------------------------------------------------------------------------------------------
-local function playVoiceAlarms()
-
-	if (telemetryActive == true and isAlarmCapacityOneActive == false and alarmCapacityLevelOneFile~="" and batteryPercentageRounded <= alarmCapacityLevelOne and batteryPercentageRounded > alarmCapacityLevelTwo and effectivePercentageAtStartUp > alarmCapacityLevelOne) then
-		system.playFile(alarmCapacityLevelOneFile,AUDIO_QUEUE)
-		system.vibration(true,4)
-		isAlarmCapacityOneActive=true   
-	end
-	
-	if (telemetryActive == true and isAlarmCapacityTwoActive == false and alarmCapacityLevelTwoFile~="" and batteryPercentageRounded <= alarmCapacityLevelTwo and batteryPercentageRounded > alarmCapacityLevelThree and effectivePercentageAtStartUp > alarmCapacityLevelTwo) then
-		system.playFile(alarmCapacityLevelTwoFile,AUDIO_QUEUE)
-		system.vibration(true,4)
-		isAlarmCapacityTwoActive=true   
-	end
-	
-	if (telemetryActive == true and isAlarmCapacityThreeActive == false and alarmCapacityLevelThreeFile~="" and batteryPercentageRounded <= alarmCapacityLevelThree and batteryPercentageRounded > alarmCapacityLevelFour and effectivePercentageAtStartUp > alarmCapacityLevelThree) then
-		system.playFile(alarmCapacityLevelThreeFile,AUDIO_QUEUE)
-		system.vibration(true,4)
-		isAlarmCapacityThreeActive=true   
-	end
-	
-	if (telemetryActive == true and isAlarmCapacityFourActive == false and alarmCapacityLevelFourFile~="" and batteryPercentageRounded <= alarmCapacityLevelFour and batteryPercentageRounded > alarmCapacityLevelFive and effectivePercentageAtStartUp > alarmCapacityLevelFour) then
-		system.playFile(alarmCapacityLevelFourFile,AUDIO_QUEUE)
-		system.vibration(true,4)
-		isAlarmCapacityFourActive=true   
-	end
-	
-	if (telemetryActive == true and isAlarmCapacityFiveActive == false and alarmCapacityLevelFiveFile~="" and batteryPercentageRounded <= alarmCapacityLevelFive and batteryPercentageRounded > alarmCapacityLevelSix and effectivePercentageAtStartUp > alarmCapacityLevelFive) then
-		system.playFile(alarmCapacityLevelFiveFile,AUDIO_QUEUE)
-		system.vibration(true,4)
-		isAlarmCapacityFiveActive=true   
-	end
-	
-	if (telemetryActive == true and isAlarmCapacitySixActive == false and alarmCapacityLevelSixFile~="" and batteryPercentageRounded <= alarmCapacityLevelSix and effectivePercentageAtStartUp > alarmCapacityLevelSix) then
-		system.playFile(alarmCapacityLevelSixFile,AUDIO_QUEUE)
-		system.vibration(true,4)
-		isAlarmCapacitySixActive=true   
-	end
-	
-	if (telemetryActive == true and voltagePerCellAveraged <= (alarmVoltageLevelOne/100) and lowVoltageChirpBoolean == true) then
-		system.playBeep(1,4000,20)
-	end
-	
-	--collectgarbage()
-	
-end
---------------------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------------------
--- Main Jeti Tx loop function
---------------------------------------------------------------------------------------------
-local function loop()
-
-	trackTimeAndResetValues()
-	updateRxValues()
-		
-	if (telemetryActive == true) then
-		updateTelemetrySensors()
-		playVoiceAlarms()
-	end
-
-	--collectgarbage()
-end
---------------------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------------------
--- Function to create debug form, which lists a bunch of debug related parameters.
---------------------------------------------------------------------------------------------
-local function printForm()
-
-	lcd.drawText(0,0,"Time="..string.format("%4.1f s",currentTime),FONT_MINI)
-	lcd.drawText(0,10,"Loop="..string.format("%4.1f ms",avgTime*1000),FONT_MINI)
-	lcd.drawText(0,20,"tmePwrOn="..string.format("%4.1f s",timeAtPowerOn),FONT_MINI)
-	lcd.drawText(0,30,"TimerActiv="..tostring(flightTimerActive),FONT_MINI)
-	lcd.drawText(0,40,"resetTimer="..tostring(resetTimer),FONT_MINI)
-	
-	lcd.drawText(0,50,"flightTimer="..string.format("%4.1f s",timeCounter),FONT_MINI)
-	lcd.drawText(0,60,"String="..flightTimeMinutesSecondsString,FONT_MINI)
-	lcd.drawText(65,60,flightTimeTenthsString,FONT_MINI)
-	
-	lcd.drawText(0,70,"hasRxPwdOn="..tostring(hasRxBeenPoweredOn),FONT_MINI)
-	lcd.drawText(0,80,"isRxPwdOn="..tostring(isRxPoweredOn),FONT_MINI)
-	lcd.drawText(0,90,"resetRx="..tostring(resetRx),FONT_MINI)
-	lcd.drawText(0,100,"timeDelay="..string.format("%4.2f s",timeDelay),FONT_MINI)
-	lcd.drawText(0,110,"telemActive="..tostring(telemetryActive),FONT_MINI)
-	lcd.drawText(0,120,"telemMinMax="..tostring(activateTelemetryMinMax),FONT_MINI)
-	lcd.drawText(0,130,"resetMinMax="..tostring(resetTelemetryMinMax),FONT_MINI)
-
-	lcd.drawText(100,0,string.format("N%0.0f",averagingWindowCellVoltage),FONT_MINI)
-	
-	for i,entry in pairs(value_list_cell_voltages) do
-		lcd.drawText(100,10*i,string.format("%4.2f",entry),FONT_MINI)
-	end
-	
-	lcd.drawText(125,0,"Estimate?="..tostring(estimateUsedLipoBoolean),FONT_MINI)
-	lcd.drawText(125,10,string.format("VInitial=%4.2f",voltageSensorValue),FONT_MINI)
-	lcd.drawText(125,20,string.format("VValue=%4.2f",voltagePerCellAtStartup),FONT_MINI)
-	
-	lcd.drawText(125,30,string.format("Initial=%i%%",batteryCapacityPercentAtStartup),FONT_MINI)
-	lcd.drawText(125,40,string.format("InitialmAh=%i",batteryCapacityUsedAtStartup),FONT_MINI)
-	
-	lcd.drawText(125,50,string.format("Capacity=%i",lipoCapacity),FONT_MINI)
-	lcd.drawText(125,60,string.format("CapEffctv=%i",effectiveLipoCapacity),FONT_MINI)
-	lcd.drawText(125,70,string.format("CapUsed=%5.2f%%",batteryCapacityUsed),FONT_MINI)
-	lcd.drawText(125,80,string.format("TotalUsed=%6.1f",batteryCapacityUsedTotal),FONT_MINI)
-	lcd.drawText(125,90,string.format("TotalPerc=%5.2f%%",batteryPercentage),FONT_MINI)
-	lcd.drawText(125,100,string.format("TotalPerc=%2.0f%%",batteryPercentage),FONT_MINI)
-	
-	lcd.drawText(215,0,string.format("Cell=%4.2f",voltagePerCell),FONT_MINI)
-	lcd.drawText(215,10,string.format("Avg=%4.2f",voltagePerCellAveraged),FONT_MINI)
-	lcd.drawText(215,20,string.format("Min=%4.2f",minVoltagePerCell),FONT_MINI)
-	lcd.drawText(215,30,string.format("Max=%4.2f",maxVoltagePerCell),FONT_MINI)
-		
-	lcd.drawText(215,40,"rx_V="..tostring(rx_1_Voltage),FONT_MINI)
-	lcd.drawText(215,50,"min="..tostring(rx_1_Voltage_min),FONT_MINI)
-	lcd.drawText(215,60,"rx_Q="..tostring(rx_1_Q),FONT_MINI)
-	lcd.drawText(215,70,"min="..tostring(rx_1_Q_min),FONT_MINI)
-	lcd.drawText(215,80,"rx_A1="..tostring(rx_1_RSSI_A1),FONT_MINI)
-	lcd.drawText(215,90,"min="..tostring(rx_1_RSSI_A1_min),FONT_MINI)
-	
-
-end
---------------------------------------------------------------------------------------------
-
+	return base_r,base_g,base_b
+end	
+------------------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------------------
 -- Function that creates main telemetry window.
 --------------------------------------------------------------------------------------------
 local function printTelemetryWindow()
-	
---[[	
-	local batteryPercentage = 84
-	local batteryCapacityUsedTotal = 481
-	local effectiveLipoCapacity = 2960
-	local rpm = "0"
-	local rpmMax = 0
-	local flightTimeMinutesSecondsString = "00:00"
-	local flightTimeTenthsString = ".0"
-	local voltagePerCellAveraged = 4.08
-	local minVoltagePerCell = 4.08
-	local maxVoltagePerCell = 4.09
-	
-	local escCurrent = 0.5
-	local escCurrentMax = 0.5
-	local escTemp = 35
-	local escTempMax = 35
-	local escThrottle = 0
-	local escThrottleMax = 0
-
-	local vibrations = 0
-	local vibrationsMax = 0
-	
-	local rx_1_Q = 100
-	local rx_1_Q_min = 100
-	local rx_1_Voltage_Averaged = 8.2
-	local rx_1_Voltage_min = 8.19
-	local rx_1_Voltage_max = 8.20
-	local rx_1_RSSI_A1 = 57
-	local rx_1_RSSI_A2 = 57
-	local rx_1_RSSI_A1_min = 57
-	local rx_1_RSSI_A2_min = 57
-
-	local elevatorRateMin = -0
-	local elevatorRateMax = 0
-
-	local aileronRateMin = -0
-	local aileronRateMax = 0
-
-	local rudderRateMin = -0
-	local rudderRateMax = 0
-
-	local lipoCapacity = 3700
-	local lipoCellCount = 12
-	local batteryPercentageRounded = 84
-	--]]
-	
-	local base_r,base_g,base_b
-	
-	local background_r,background_g,background_b = lcd.getBgColor()
-	
-	if ((background_r + background_g + background_b) < 300) then
-		base_r = 255
-		base_g = 255
-		base_b = 255
-	else
-		base_r = 0
-		base_g = 0
-		base_b = 0
-	end
-	
-	local green_r,green_g,green_b = 0,141,0
-	local green_light_r,green_light_g,green_light_b = 103,161,103
-	local red_r,red_g,red_b = 255,0,0
-	local blue_r,blue_g,blue_b = 0,0,255
-	local orange_r,orange_g,orange_b = 255,179,0
-	
-	local voltage_r,voltage_g,voltage_b = 0,204,255
-	local antenna_r,antenna_g,antenna_b = 0,204,0
-	local quality_r,quality_g,quality_b = 0,0,255
-	
-	local max_r,max_g,max_b = 255,0,255
-	local min_r,min_g,min_b = 88,0,212
-	
-	local screenMinX = 0
-	local screenMinY = 0
-	local screenMaxX = 318
-	local screenMaxY = 159
-	
-	
-	if (debugOn == true) then
-	
-		if (telemetryActive) then
-			lcd.setColor(base_r,base_g,base_b)
-			lcd.drawFilledRectangle(1,1,5,5)
-			lcd.setColor(base_r,base_g,base_b)
-		else
-			lcd.setColor(base_r,base_g,base_b)
-			lcd.drawRectangle(1,1,5,5)
-			lcd.setColor(base_r,base_g,base_b)
-		end
-			
-		
-		if (activateTelemetryMinMax == 1) then
-			lcd.setColor(max_r,max_g,max_b)
-			lcd.drawFilledRectangle(7,1,5,5)
-			lcd.setColor(base_r,base_g,base_b)
-		else
-			lcd.setColor(base_r,base_g,base_b)
-			lcd.drawRectangle(7,1,5,5)
-			lcd.setColor(base_r,base_g,base_b)
-		end
-		
-	end
-	
-	local batterySymbolWidth = 53
-	local batterySymbolHeight = 120
-	
-	local batterySymbolX = screenMaxX*0.5 - batterySymbolWidth*0.5
-	local batterySymbolY = screenMaxY - batterySymbolHeight
-	
-	local batteryTopWidth = batterySymbolWidth*0.5
-	local batteryTopHeight = 7
-	
 	lcd.setColor(base_r,base_g,base_b)
 	lcd.drawRectangle(batterySymbolX,batterySymbolY,batterySymbolWidth,batterySymbolHeight)
 	lcd.drawRectangle(batterySymbolX+1,batterySymbolY+1,batterySymbolWidth-2,batterySymbolHeight-2)
 	lcd.drawFilledRectangle(batterySymbolX+((batterySymbolWidth-batteryTopWidth)*0.5),batterySymbolY-batteryTopHeight,batteryTopWidth,batteryTopHeight)
-	
-	if (batteryPercentageRounded >= 0 and batteryPercentageRounded <= 100) then
-		batteryPercentageRounded = batteryPercentageRounded
-	else
-		batteryPercentageRounded = 0
+
+	local batterySymbolDeltaY = (setupvars.batteryPercentageRounded*(batterySymbolHeight-4))//100
+
+	lcd.setColor( getBatteryLevel() )
+	if( setupvars.telemetryActive == true ) then		
+		lcd.drawFilledRectangle(batterySymbolX+2,batterySymbolY+(batterySymbolHeight-2-batterySymbolDeltaY),batterySymbolWidth-4,batterySymbolDeltaY)
 	end
-	
-	local batterySymbolDeltaY = (batteryPercentageRounded*(batterySymbolHeight-4))//100
-		
-	if (hasRxBeenPoweredOn == true and batteryPercentageRounded <= alarmCapacityLevelFive and batteryPercentageRounded > alarmCapacityLevelSix) then
-		lcd.setColor(orange_r,orange_g,orange_b)
-	elseif (hasRxBeenPoweredOn == true and batteryPercentageRounded <= alarmCapacityLevelSix) then
-		lcd.setColor(red_r,red_g,red_b)
-	elseif (hasRxBeenPoweredOn == true and batteryPercentageRounded > alarmCapacityLevelFive) then
-		lcd.setColor(green_r,green_g,green_b) 
-	else
-		lcd.setColor(base_r,base_g,base_b)
-	end
-		
-	lcd.drawFilledRectangle(batterySymbolX+2,batterySymbolY+(batterySymbolHeight-2-batterySymbolDeltaY),batterySymbolWidth-4,batterySymbolDeltaY)
 	lcd.setColor(base_r,base_g,base_b)
-	
 
 ----------------------------------------------------	
 
@@ -1672,33 +237,43 @@ local function printTelemetryWindow()
 	local panel_01_L_X = 0
 	local panel_01_L_Y = 0
 
-	local flightCounter = string.format("%04i", flightCount)
-	lcd.drawText(panel_01_L_X + 1,1,trans21.flight,FONT_MINI)
+	local flightCounter = string.format("%04i", setupvars.flightCounter[2])
+	lcd.drawText(panel_01_L_X + 1,1,setupvars.trans.flight,FONT_MINI)
 	lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_MINI,flightCounter)+6,1,flightCounter,FONT_MINI)
+
+	local timeCounter = setupvars.timeCounter
+	local flightTimeOver = ""
+	if( timeCounter < 0  ) then
+		timeCounter = (timeCounter * -1) + setupvars.timer[2]
+		flightTimeOver = "+"
+	end
+	local mm = (timeCounter // (60)) % 60
+	local ss = (timeCounter // 1) % 60
+	local t = (timeCounter // 0.1) % 10
+
+	flightTimeMinutesSecondsString = string.format("%s%02d:%02d", flightTimeOver, mm, ss)
+	flightTimeTenthsString = string.format(".%01d", t)
 		
-	
-	lcd.drawText(panel_01_L_X + 1,(panel_01_L_Height - lcd.getTextHeight(FONT_MINI,trans21.time))-1,trans21.time,FONT_MINI)
-	--lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_MAXI,flightTimeMinutesSecondsString)-9,(panel_01_L_Height - lcd.getTextHeight(FONT_MAXI,flightTimeMinutesSecondsString))*0.5,flightTimeMinutesSecondsString,FONT_MAXI)
-	--lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_BIG,flightTimeTenthsString)+6,(panel_01_L_Height - lcd.getTextHeight(FONT_BIG,flightTimeTenthsString)),flightTimeTenthsString,FONT_BIG)
+	--print( string.format("%s %s", flightTimeMinutesSecondsString, flightTimeTenthsString) )
+	lcd.drawText(panel_01_L_X + 1,(panel_01_L_Height - lcd.getTextHeight(FONT_MINI,setupvars.trans.time))-1,setupvars.trans.time,FONT_MINI)
 	lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_BIG,flightTimeMinutesSecondsString)-6,(panel_01_L_Height - lcd.getTextHeight(FONT_BIG,flightTimeMinutesSecondsString)) + 2,flightTimeMinutesSecondsString,FONT_BIG)
 	lcd.drawText(panel_01_L_Width - lcd.getTextWidth(FONT_MINI,flightTimeTenthsString)+6,(panel_01_L_Height - lcd.getTextHeight(FONT_MINI,flightTimeTenthsString)),flightTimeTenthsString,FONT_MINI)
 
-
 ----------------------------------------------------
-	
+
+
 	local panel_02_L_Width = batterySymbolX
 	local panel_02_L_Height = 59
 	local panel_02_L_X = 0
 	local panel_02_L_Y = panel_01_L_Height
 	
 	lcd.setColor(base_r,base_g,base_b)
-
 	lcd.drawFilledRectangle(panel_02_L_X,panel_02_L_Y,panel_02_L_Width-3,2)
-	
-	local rx_1_RSSI_A1_fraction = getRSSI(rx_1_RSSI_A1)
-	local rx_1_RSSI_A2_fraction = getRSSI(rx_1_RSSI_A2)
-	local rx_1_RSSI_A1_fraction_min = getRSSI(rx_1_RSSI_A1_min)
-	local rx_1_RSSI_A2_fraction_min = getRSSI(rx_1_RSSI_A2_min)
+
+	local rx_1_RSSI_A1_fraction = getRSSI(setupvars.rx_1_RSSI_A1)
+	local rx_1_RSSI_A2_fraction = getRSSI(setupvars.rx_1_RSSI_A2)
+	local rx_1_RSSI_A1_fraction_min = getRSSI(setupvars.rx_1_RSSI_A1_min)
+	local rx_1_RSSI_A2_fraction_min = getRSSI(setupvars.rx_1_RSSI_A2_min)
 	
 	
 	local rxQBarWidth = 65
@@ -1710,30 +285,28 @@ local function printTelemetryWindow()
 	lcd.drawText(rxQBarX - 14,rxQBarY-4,"Q",FONT_MINI)		
 	lcd.drawRectangle(rxQBarX,rxQBarY,rxQBarWidth,rxQBarHeight)
 	
-	local rxQBarDeltaX = (rx_1_Q*rxQBarWidth)//100 - 2
+	local rxQBarDeltaX = (setupvars.rx_1_Q*rxQBarWidth)//100 - 2
 	lcd.setColor(quality_r,quality_g,quality_b)
 	lcd.drawFilledRectangle(rxQBarX+1,rxQBarY+1,rxQBarDeltaX,rxQBarHeight-2)
 		
-	local rx_1_Q_min_X = (((rx_1_Q_min)/(100))*100) * (rxQBarWidth-2)//100
-	--lcd.setColor(red_r,red_g,red_b)
-	if (rx_1_Q_min < 99) then
+	local rx_1_Q_min_X = (((setupvars.rx_1_Q_min)/(100))*100) * (rxQBarWidth-2)//100
+	if (setupvars.rx_1_Q_min < 99) then
 		lcd.drawFilledRectangle(rxQBarX+1+rx_1_Q_min_X,rxQBarY+1,2,rxQBarHeight-2)
 	elseif (rx_1_Q_min == 99) then
 		lcd.drawFilledRectangle(rxQBarX+1+rx_1_Q_min_X,rxQBarY+1,1,rxQBarHeight-2)
 	end
 	lcd.setColor(base_r,base_g,base_b)
 		
-	local rx_1_Q_String = string.format("%1.0f",rx_1_Q)
+	local rx_1_Q_String = string.format("%1.0f",setupvars.rx_1_Q)
 	lcd.drawText((rxQBarX+rxQBarWidth) + (panel_02_L_Width - (rxQBarX+rxQBarWidth) - lcd.getTextWidth(FONT_MINI,rx_1_Q_String))*0.5-12,rxQBarY-4,rx_1_Q_String,FONT_MINI)
 	--lcd.setColor(red_r,red_g,red_b)
-	local rx_1_Q_min_String = string.format("%i",rx_1_Q_min)
+	local rx_1_Q_min_String = string.format("%i",setupvars.rx_1_Q_min)
 	if (rx_1_Q_min == 101) then
 		lcd.drawText((rxQBarX+rxQBarWidth) + (panel_02_L_Width - (rxQBarX+rxQBarWidth) - lcd.getTextWidth(FONT_MINI,"-"))*0.5+10,rxQBarY-5,"-",FONT_MINI)
 	else
 		lcd.drawText((rxQBarX+rxQBarWidth) + (panel_02_L_Width - (rxQBarX+rxQBarWidth) - lcd.getTextWidth(FONT_MINI,rx_1_Q_min_String))*0.5+10,rxQBarY-4,rx_1_Q_min_String,FONT_MINI)
 	end
 	lcd.setColor(base_r,base_g,base_b)
-	
 	
 	
 	local rx1RSSIA1BarWidth = rxQBarWidth
@@ -1756,7 +329,7 @@ local function printTelemetryWindow()
 		lcd.drawFilledRectangle(rx1RSSIA1BarX+1+rx_1_RSSI_A1_fraction_min_X,rx1RSSIA1BarY+1,2,rx1RSSIA1BarHeight-2)
 	end
 	lcd.setColor(base_r,base_g,base_b)
-		
+	
 	local rx_1_RSSI_A1_fraction_String = string.format("%i",rx_1_RSSI_A1_fraction)
 	lcd.drawText((rx1RSSIA1BarX+rx1RSSIA1BarWidth) + (panel_02_L_Width - (rx1RSSIA1BarX+rx1RSSIA1BarWidth) - lcd.getTextWidth(FONT_MINI,rx_1_RSSI_A1_fraction_String))*0.5-12,rx1RSSIA1BarY-4,rx_1_RSSI_A1_fraction_String,FONT_MINI)
 	--lcd.setColor(red_r,red_g,red_b)
@@ -1784,7 +357,6 @@ local function printTelemetryWindow()
 	lcd.setColor(base_r,base_g,base_b)
 	
 	local rx_1_RSSI_A2_fraction_min_X = (((rx_1_RSSI_A2_fraction_min)/(9))*100) * (rx1RSSIA2BarWidth-2)//100
-	--lcd.setColor(red_r,red_g,red_b)
 	if (rx_1_RSSI_A2_fraction_min < 9) then
 		lcd.drawFilledRectangle(rx1RSSIA2BarX+1+rx_1_RSSI_A2_fraction_min_X,rx1RSSIA2BarY+1,2,rx1RSSIA2BarHeight-2)
 	end
@@ -1792,7 +364,6 @@ local function printTelemetryWindow()
 	
 	local rx_1_RSSI_A2_fraction_String = string.format("%i",rx_1_RSSI_A2_fraction)
 	lcd.drawText((rx1RSSIA2BarX+rx1RSSIA2BarWidth) + (panel_02_L_Width - (rx1RSSIA2BarX+rx1RSSIA2BarWidth) - lcd.getTextWidth(FONT_MINI,rx_1_RSSI_A2_fraction_String))*0.5-12,rx1RSSIA2BarY-4,rx_1_RSSI_A2_fraction_String,FONT_MINI)
-	--lcd.setColor(red_r,red_g,red_b)
 	local rx_1_RSSI_A2_fraction_min_String = string.format("%i",rx_1_RSSI_A2_fraction_min)
 	if (rx_1_RSSI_A2_fraction_min == 999) then
 		lcd.drawText((rx1RSSIA2BarX+rx1RSSIA2BarWidth) + (panel_02_L_Width - (rx1RSSIA2BarX+rx1RSSIA2BarWidth) - lcd.getTextWidth(FONT_MINI,"-"))*0.5+10,rx1RSSIA2BarY-5,"-",FONT_MINI)
@@ -1801,24 +372,23 @@ local function printTelemetryWindow()
 	end
 	lcd.setColor(base_r,base_g,base_b)
 	
-	
-	local rx_1_Voltage_String = string.format("%4.2f",rx_1_Voltage_Averaged)
+	local rx_1_Voltage_String = string.format("%4.2f",setupvars.rx_1_Voltage_Averaged)
 	lcd.drawText(panel_02_L_X + 23,(panel_02_L_Y + panel_02_L_Height - lcd.getTextHeight(FONT_BIG,rx_1_Voltage_String))-0,rx_1_Voltage_String,FONT_BIG)
 	lcd.drawText(panel_02_L_X + 60,(panel_02_L_Y + panel_02_L_Height - lcd.getTextHeight(FONT_MINI,"v"))-6,"v",FONT_MINI)
 	
 	lcd.drawText(panel_02_L_X + 71,(panel_02_L_Y + panel_02_L_Height - lcd.getTextHeight(FONT_MINI,"min"))-10,"min",FONT_MINI)
 	lcd.drawText(panel_02_L_X + 71,(panel_02_L_Y + panel_02_L_Height - lcd.getTextHeight(FONT_MINI,"max"))-2,"max",FONT_MINI)
-	local rx_1_Voltage_min_String = string.format("%4.2f",rx_1_Voltage_min)
+	local rx_1_Voltage_min_String = string.format("%4.2f",setupvars.rx_1_Voltage_min)
 	lcd.setColor(red_r,red_g,red_b)
-	if (rx_1_Voltage_min == 99.9) then
+	if (setupvars.rx_1_Voltage_min == 99.9) then
 		lcd.drawText(panel_02_L_X + 95,(panel_02_L_Y + panel_02_L_Height - lcd.getTextHeight(FONT_NORMAL,"---"))-9," ---",FONT_NORMAL)
 	else
 		lcd.drawText(panel_02_L_X + 97,(panel_02_L_Y + panel_02_L_Height - lcd.getTextHeight(FONT_MINI,rx_1_Voltage_min_String))-10,rx_1_Voltage_min_String,FONT_MINI)
 	end
 	lcd.drawText(panel_02_L_X + 121,(panel_02_L_Y + panel_02_L_Height - lcd.getTextHeight(FONT_MINI,"v"))-11,"v",FONT_MINI)
-	local rx_1_Voltage_max_String = string.format("%4.2f",rx_1_Voltage_max)
+	local rx_1_Voltage_max_String = string.format("%4.2f",setupvars.rx_1_Voltage_max)
 	lcd.setColor(green_r,green_g,green_b)
-	if (rx_1_Voltage_max == -1.0) then
+	if (setupvars.rx_1_Voltage_max == -1.0) then
 		lcd.drawText(panel_02_L_X + 95,(panel_02_L_Y + panel_02_L_Height - lcd.getTextHeight(FONT_NORMAL,"---"))-0," ---",FONT_NORMAL)
 	else
 		lcd.drawText(panel_02_L_X + 97,(panel_02_L_Y + panel_02_L_Height - lcd.getTextHeight(FONT_MINI,rx_1_Voltage_max_String))-1,rx_1_Voltage_max_String,FONT_MINI)
@@ -1827,31 +397,28 @@ local function printTelemetryWindow()
 	lcd.setColor(base_r,base_g,base_b)
 	
 	lcd.drawText(panel_02_L_X + 1,(panel_02_L_Y + panel_02_L_Height - lcd.getTextHeight(FONT_MINI,"Rx"))-1,"Rx",FONT_MINI)
-	
-	
-	
+
 ----------------------------------------------------
-	
+
 	local panel_03_L_Width = batterySymbolX
 	local panel_03_L_Height = 43
 	local panel_03_L_X = 0
 	local panel_03_L_Y = panel_01_L_Height + panel_02_L_Height
-	
-	lcd.setColor(base_r,base_g,base_b)
 
+	lcd.setColor(base_r,base_g,base_b)
 	lcd.drawFilledRectangle(panel_03_L_X,panel_03_L_Y,panel_03_L_Width-3,2)
 	
-	if( elevatorSensorParam > 0 or aileronSensorParam > 0 or rudderSensorParam > 0 or vibrationsSensorParam > 0 ) then
-		lcd.drawText(panel_03_L_X + 1,(panel_03_L_Y + panel_03_L_Height - lcd.getTextHeight(FONT_MINI,trans21.fbl))-1,trans21.fbl,FONT_MINI)
+	if( setupvars.elevatorSensor[1] ~= 0 or setupvars.aileronSensor[1] ~= 0 or setupvars.rudderSensor[1] ~= 0 or setupvars.vibrationsSensor[1] ~= 0 ) then
+		lcd.drawText(panel_03_L_X + 1,(panel_03_L_Y + panel_03_L_Height - lcd.getTextHeight(FONT_MINI,setupvars.trans.fbl))-1,setupvars.trans.fbl,FONT_MINI)
 	end
 
-	local fontHeight = lcd.getTextHeight(FONT_MINI, trans21.actElevator) - 2
-
-	if( elevatorSensorParam > 0 ) then
-		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1,trans21.actElevator,FONT_MINI)
-		local elevatorRateMinString = string.format("%i",elevatorRateMin)
-		lcd.setColor(min_r,min_g,min_b)
-		if (elevatorRateMin == 1e6) then
+	local fontHeight = lcd.getTextHeight(FONT_MINI, setupvars.trans.actElevator) - 2
+	local elevatorRateMinString = ""
+	local elevatorRateMaxString = ""
+	if( setupvars.elevatorSensor[1] ~= 0 ) then
+		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1,setupvars.trans.actElevator,FONT_MINI)
+		elevatorRateMinString = string.format("%3i",setupvars.elevatorRateMin)
+		if (setupvars.elevatorRateMin == 1e6) then
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+1,"---",FONT_MINI)
 		else
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,elevatorRateMinString)-38,panel_03_L_Y+1,elevatorRateMinString,FONT_MINI)
@@ -1859,9 +426,8 @@ local function printTelemetryWindow()
 		
 		lcd.setColor(base_r,base_g,base_b)
 		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+1,"/",FONT_MINI)
-		local elevatorRateMaxString = string.format("+%i",elevatorRateMax)
-		--lcd.setColor(max_r,max_g,max_b)
-		if (elevatorRateMax == -1e6) then
+		elevatorRateMaxString = string.format("+%3i",setupvars.elevatorRateMax)
+		if (setupvars.elevatorRateMax == -1e6) then
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+1,"---",FONT_MINI)
 		else
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,elevatorRateMaxString)-5,panel_03_L_Y+1,elevatorRateMaxString,FONT_MINI)
@@ -1869,11 +435,12 @@ local function printTelemetryWindow()
 	end
 	lcd.setColor(base_r,base_g,base_b)
 	
-	if( aileronSensorParam > 0 ) then
-		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1+fontHeight,trans21.actAileron,FONT_MINI)
-		local aileronRateMinString = string.format("%i",aileronRateMin)
-		lcd.setColor(min_r,min_g,min_b)
-		if (aileronRateMin == 1e6) then
+	local aileronRateMinString = ""
+	local aileronRateMaxString = ""
+	if( setupvars.aileronSensor[1] ~= 0 ) then
+		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1+fontHeight,setupvars.trans.actAileron,FONT_MINI)
+		aileronRateMinString = string.format("%3i",setupvars.aileronRateMin)
+		if (setupvars.aileronRateMin == 1e6) then
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+1+fontHeight,"---",FONT_MINI)
 		else
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,aileronRateMinString)-38,panel_03_L_Y+ 1+fontHeight,aileronRateMinString,FONT_MINI)
@@ -1881,9 +448,8 @@ local function printTelemetryWindow()
 		
 		lcd.setColor(base_r,base_g,base_b)
 		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+1+fontHeight,"/",FONT_MINI)
-		local aileronRateMaxString = string.format("+%i",aileronRateMax)
-		--lcd.setColor(max_r,max_g,max_b)
-		if (aileronRateMax == -1e6) then
+		aileronRateMaxString = string.format("+%3i",setupvars.aileronRateMax)
+		if (setupvars.aileronRateMax == -1e6) then
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+1+fontHeight,"---",FONT_MINI)
 		else
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,aileronRateMaxString)-5,panel_03_L_Y+1+fontHeight,aileronRateMaxString,FONT_MINI)
@@ -1891,11 +457,12 @@ local function printTelemetryWindow()
 	end
 	lcd.setColor(base_r,base_g,base_b)
 
-	if( rudderSensorParam > 0 ) then
-		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1+fontHeight+fontHeight,trans21.actRudder,FONT_MINI)
-		local rudderRateMinString = string.format("%i",rudderRateMin)
-		lcd.setColor(min_r,min_g,min_b)
-		if (rudderRateMin == 1e6) then
+	local rudderRateMinString = ""
+	local rudderRateMaxString = ""
+	if( setupvars.rudderSensor[1] ~= 0 ) then
+		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1+fontHeight+fontHeight,setupvars.trans.actRudder,FONT_MINI)
+		rudderRateMinString = string.format("%3i",setupvars.rudderRateMin)
+		if (setupvars.rudderRateMin == 1e6) then
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-42,panel_03_L_Y+1+fontHeight+fontHeight,"---",FONT_MINI)
 		else
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,rudderRateMinString)-38,panel_03_L_Y+1+fontHeight+fontHeight,rudderRateMinString,FONT_MINI)
@@ -1903,9 +470,8 @@ local function printTelemetryWindow()
 
 		lcd.setColor(base_r,base_g,base_b)
 		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+1+fontHeight+fontHeight,"/",FONT_MINI)
-		local rudderRateMaxString = string.format("+%i",rudderRateMax)
-		--lcd.setColor(max_r,max_g,max_b)
-		if (rudderRateMax == -1e6) then
+		rudderRateMaxString = string.format("+%3i",setupvars.rudderRateMax)
+		if (setupvars.rudderRateMax == -1e6) then
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15,panel_03_L_Y+1+fontHeight+fontHeight,"---",FONT_MINI)
 		else
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,rudderRateMaxString)-5,panel_03_L_Y+1+fontHeight+fontHeight,rudderRateMaxString,FONT_MINI)
@@ -1913,15 +479,17 @@ local function printTelemetryWindow()
 	end	
 	lcd.setColor(base_r,base_g,base_b)
 
-	if (vibrationsSensorParam > 0) then	
-		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1+fontHeight+fontHeight+fontHeight,trans21.actVibration,FONT_MINI)
+	local vibrationsString = ""
+	local vibrationsMaxString = ""
+	if( setupvars.vibrationsSensor[1] ~= 0 ) then	
+		lcd.drawText(panel_03_L_X + 27,panel_03_L_Y+1+fontHeight+fontHeight+fontHeight,setupvars.trans.actVibration,FONT_MINI)
 
-		local vibrationsString = string.format("%i",vibrations)
+		vibrationsString = string.format("%3i",setupvars.vibrations)
 		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,vibrationsString) - 38, panel_03_L_Y+1+fontHeight+fontHeight+fontHeight, vibrationsString,FONT_MINI)
 
 		lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"/")-31,panel_03_L_Y+1+fontHeight+fontHeight+fontHeight,"/",FONT_MINI)
-		local vibrationsMaxString = string.format("%i",vibrationsMax)
-		if (vibrationsMax == -1.0) then
+		vibrationsMaxString = string.format("%3i",setupvars.vibrationsMax)
+		if (setupvars.vibrationsMax == -1.0) then
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,"---")-15, panel_03_L_Y+1+fontHeight+fontHeight+fontHeight, "---",FONT_MINI)
 		else
 			lcd.drawText(panel_03_L_X + panel_03_L_Width - lcd.getTextWidth(FONT_MINI,vibrationsMaxString)-5, panel_03_L_Y+1+fontHeight+fontHeight+fontHeight, vibrationsMaxString,FONT_MINI)
@@ -1935,27 +503,27 @@ local function printTelemetryWindow()
 	local panel_04_L_Height = 28
 	local panel_04_L_X = 0
 	local panel_04_L_Y = panel_01_L_Height + panel_02_L_Height + panel_03_L_Height
-		
-	lcd.setColor(base_r,base_g,base_b)
 
+	lcd.setColor(base_r,base_g,base_b)
 	lcd.drawFilledRectangle(panel_04_L_X,panel_04_L_Y,panel_04_L_Width-3,2)
 	
-	if( rpmSensorParam > 0 ) then
+	local rpmString = 0
+	local rpmMaxString = 0
+	if( setupvars.rpmSensor[1] ~= 0 ) then
 		lcd.drawText(panel_04_L_X + panel_04_L_Width - lcd.getTextWidth(FONT_MINI,"RPM")-2,panel_04_L_Y + (panel_04_L_Height - lcd.getTextHeight(FONT_MINI,"RPM"))*0.5+3,"RPM",FONT_MINI)
-		local rpmString = string.format("%i",rpm)
+		rpmString = string.format("%4i",setupvars.rpm)
 		lcd.drawText((panel_04_L_Width - lcd.getTextWidth(FONT_MAXI,rpmString))-25,panel_04_L_Y+panel_04_L_Height - lcd.getTextHeight(FONT_MAXI,rpmString)+8,rpmString,FONT_MAXI)
 		
 		lcd.drawText(panel_04_L_X+5,panel_04_L_Y + panel_04_L_Height - lcd.getTextHeight(FONT_MINI,"max")-12,"max",FONT_MINI)
-		local rpmMaxString = string.format("%i",rpmMax)
+		rpmMaxString = string.format("%4i",setupvars.rpmMax)
 		--lcd.setColor(max_r,max_g,max_b)
 
-		if (rpmMax == -1.0) then
+		if (setupvars.rpmMax == -1.0) then
 			lcd.drawText(panel_04_L_X + (panel_04_L_Width - lcd.getTextWidth(FONT_MINI,"------"))*0.5 - 50,panel_04_L_Y + panel_04_L_Height -lcd.getTextHeight(FONT_MINI,"------"),"------",FONT_MINI)
 		else
 			lcd.drawText(panel_04_L_X + (panel_04_L_Width - lcd.getTextWidth(FONT_MINI,rpmMaxString))*0.5 - 50,panel_04_L_Y + panel_04_L_Height -lcd.getTextHeight(FONT_MINI,rpmMaxString),rpmMaxString,FONT_MINI)
 		end
 	end
-
 
 ----------------------------------------------------
 	
@@ -1963,17 +531,17 @@ local function printTelemetryWindow()
 	local panel_01_R_Height = 29
 	local panel_01_R_X = screenMaxX - panel_01_R_Width
 	local panel_01_R_Y = 0
-	
+
 	lcd.setColor(base_r,base_g,base_b)
 
-	if( capacitySensorParam > 0 ) then		
-		lcd.drawText(panel_01_R_X + -5,panel_01_R_Y + panel_01_R_Height - lcd.getTextHeight(FONT_MINI,trans21.lipo)-1,trans21.lipo,FONT_MINI)
+	if( setupvars.capacitySensor[1] ~= 0 ) then		
+		lcd.drawText(panel_01_R_X + -5,panel_01_R_Y + panel_01_R_Height - lcd.getTextHeight(FONT_MINI,setupvars.trans.lipo)-1,setupvars.trans.lipo,FONT_MINI)
 		lcd.drawText((panel_01_R_X + panel_01_R_Width - lcd.getTextWidth(FONT_MINI,"mAh"))-2,panel_01_R_Y + (panel_01_R_Height - lcd.getTextHeight(FONT_MINI,"mAh"))*0.5,"mAh",FONT_MINI)
-		batteryCapacityUsedString = string.format("%i",batteryCapacityUsedTotal)
+		batteryCapacityUsedString = string.format("%i",setupvars.batteryCapacityUsedTotal)
 		
-		if (hasRxBeenPoweredOn == true and batteryPercentageRounded <= alarmCapacityLevelFive and batteryPercentageRounded > alarmCapacityLevelSix and batteryCapacityUsedTotal > 0) then
+		if (hasRxBeenPoweredOn == true and batteryPercentageRounded <= setupvars.alarmCapacityLevelFive and batteryPercentageRounded > setupvars.alarmCapacityLevelSix and batteryCapacityUsedTotal > 0) then
 			lcd.setColor(orange_r,orange_g,orange_b)
-		elseif (hasRxBeenPoweredOn == true and batteryPercentageRounded <= alarmCapacityLevelSix and batteryCapacityUsedTotal > 0) then
+		elseif (hasRxBeenPoweredOn == true and batteryPercentageRounded <= setupvars.alarmCapacityLevelSix and batteryCapacityUsedTotal > 0) then
 			lcd.setColor(red_r,red_g,red_b)
 		else
 			lcd.setColor(base_r,base_g,base_b)
@@ -1984,13 +552,12 @@ local function printTelemetryWindow()
 
 	lcd.setColor(base_r,base_g,base_b)
 	
-	if (telemetryActive == true and estimateUsedLipoBoolean == true and voltagePerCellAtStartup < (voltageThresholdUsedLipo/100)) then
+	if( setupvars.telemetryActive == true and setupvars.alarmUsedLipo[1] == 1 and setupvars.voltagePerCellAtStartup < (setupvars.alarmUsedLipo[2]/100) ) then
 		lcd.setColor(red_r,red_g,red_b)
-		lcd.drawText(panel_01_R_X + -5,panel_01_R_Y+5,trans21.estimate,FONT_MINI)
+		lcd.drawText(panel_01_R_X + -5,panel_01_R_Y+5,setupvars.trans.estimate,FONT_MINI)
 		lcd.setColor(base_r,base_g,base_b)
 	end
 
-	
 ----------------------------------------------------
 
 	local panel_02_R_Width = screenMaxX - batterySymbolX - batterySymbolWidth
@@ -1999,17 +566,17 @@ local function printTelemetryWindow()
 	local panel_02_R_Y = panel_01_R_Height
 	
 	lcd.setColor(base_r,base_g,base_b)
-
 	lcd.drawFilledRectangle(panel_02_R_X+3,panel_02_R_Y,panel_02_R_Width-3,2)
 	
-	if( currentSensorParam > 0 ) then
-		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5,trans21.actCurrent,FONT_MINI)
-		local escCurrentString = string.format("%3.1f",escCurrent)
+	local escCurrentString = ""
+	local escCurrentMaxString = ""
+	if( setupvars.currentSensor[1] ~= 0 ) then
+		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5,setupvars.trans.actCurrent,FONT_MINI)
+		escCurrentString = string.format("%3.1f",setupvars.escCurrent)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escCurrentString)-45,panel_02_R_Y,escCurrentString,FONT_BIG)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"A")-34,panel_02_R_Y+5,"A",FONT_MINI)
-		local escCurrentMaxString = string.format("%3iA",escCurrentMax)
-		-- lcd.setColor(max_r,max_g,max_b)
-		if (escCurrentMax == -1.0) then
+		escCurrentMaxString = string.format("%3iA",setupvars.escCurrentMax)
+		if (setupvars.escCurrentMax == -1.0) then
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- A")-5,panel_02_R_Y+5,"--- A",FONT_MINI)
 		else
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escCurrentMaxString)-5,panel_02_R_Y+5,escCurrentMaxString,FONT_MINI)
@@ -2017,14 +584,15 @@ local function printTelemetryWindow()
 	end
 	lcd.setColor(base_r,base_g,base_b)
 	
-	if( temperatureSensorParam > 0 ) then
-		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18,trans21.actTemp,FONT_MINI)
-		local escTempString = string.format("%i",escTemp)
+	local escTempString = ""
+	local escTempMaxString = ""
+	if( setupvars.temperatureSensor[1] ~= 0 ) then
+		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18,setupvars.trans.actTemp,FONT_MINI)
+		escTempString = string.format("%i",setupvars.escTemp)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escTempString)-45,panel_02_R_Y+0+18,escTempString,FONT_BIG)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"°C")-34,panel_02_R_Y+5+18,"°C",FONT_MINI)
-		local escTempMaxString = string.format("%i°C",escTempMax)
-		-- lcd.setColor(max_r,max_g,max_b)
-		if (escTempMax == -1.0) then
+		escTempMaxString = string.format("%i°C",setupvars.escTempMax)
+		if (setupvars.escTempMax == -1.0) then
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"---°C")-5,panel_02_R_Y+5+18,"---°C",FONT_MINI)
 		else
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escTempMaxString)-5,panel_02_R_Y+5+18,escTempMaxString,FONT_MINI)
@@ -2032,14 +600,15 @@ local function printTelemetryWindow()
 	end
 	lcd.setColor(base_r,base_g,base_b)
 	
-	if( throttleSensorParam > 0 ) then
-		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18,trans21.actThrottle,FONT_MINI)
-		local escThrottleString = string.format("%i",escThrottle)
+	local escThrottleString = ""
+	local escThrottleMaxString = ""
+	if( setupvars.throttleSensor[1] ~= 0 ) then
+		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18,setupvars.trans.actThrottle,FONT_MINI)
+		escThrottleString = string.format("%i",setupvars.escThrottle)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escThrottleString)-45,panel_02_R_Y+0+18+18,escThrottleString,FONT_BIG)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"%")-34,panel_02_R_Y+5+18+18,"%",FONT_MINI)
-		local escThrottleMaxString = string.format("%i%%",escThrottleMax)
-		-- lcd.setColor(max_r,max_g,max_b)
-		if (escThrottleMax == -1.0) then
+		escThrottleMaxString = string.format("%i%%",setupvars.escThrottleMax)
+		if (setupvars.escThrottleMax == -1.0) then
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- %")-3,panel_02_R_Y+5+18+18,"--- %",FONT_MINI)
 		else
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escThrottleMaxString)-3,panel_02_R_Y+5+18+18,escThrottleMaxString,FONT_MINI)
@@ -2047,15 +616,16 @@ local function printTelemetryWindow()
 	end
 	lcd.setColor(base_r,base_g,base_b)
 
-	if( maltiSensorParam > 0 ) then
-		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18+18,trans21.actHeight,FONT_MINI)
-		local hightString = string.format("%i",hight)
+	local hightString = ""
+	local hightMaxString = ""
+	if( setupvars.maltiSensor[1] ~= 0 ) then
+		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18+18,setupvars.trans.actHeight,FONT_MINI)
+		hightString = string.format("%i",setupvars.hight)
 		lcd.drawText(panel_02_R_X+(panel_02_R_Width-lcd.getTextWidth(FONT_BIG,hightString))-45,panel_02_R_Y+0+18+18+18,hightString,FONT_BIG)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"m")-34,panel_02_R_Y+5+18+18+18,"m",FONT_MINI)
 
-		local hightMaxString = string.format("%im",hightMax)
-		-- lcd.setColor(max_r,max_g,max_b)
-		if (hightMax == -1.0) then
+		hightMaxString = string.format("%im",setupvars.hightMax)
+		if (setupvars.hightMax == -1.0) then
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- m")-3,panel_02_R_Y+5+18+18+18,"--- m",FONT_MINI)
 		else
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,hightMaxString)-3,panel_02_R_Y+5+18+18+18,hightMaxString,FONT_MINI)
@@ -2063,64 +633,64 @@ local function printTelemetryWindow()
 	end
 	lcd.setColor(base_r,base_g,base_b)
 
-
 ----------------------------------------------------
 	
 	local panel_03_R_Width = screenMaxX - batterySymbolX - batterySymbolWidth
 	local panel_03_R_Height = 55
 	local panel_03_R_X = panel_04_L_Width + batterySymbolWidth
 	local panel_03_R_Y = panel_01_R_Height + panel_02_R_Height
+
+	lcd.setColor(base_r,base_g,base_b)
+	lcd.drawFilledRectangle(panel_03_R_X+3,panel_03_R_Y,panel_03_R_Width-3,2)
 	
-		lcd.setColor(base_r,base_g,base_b)
+	local voltageSensorValueString = ""
+	local voltageBarWidth = 76
+	local voltageBarHeight = 7
+	
+	local voltageBarX = panel_03_R_X + (panel_03_R_Width - voltageBarWidth)*0.5 
+	local voltageBarY = panel_03_R_Y+5
+	
+	local minVoltageValueBar = 3.20
+	local maxVoltageValueBar = 4.20
+	local restingVoltageTick = 3.75
 
-		lcd.drawFilledRectangle(panel_03_R_X+3,panel_03_R_Y,panel_03_R_Width-3,2)
-		
-	if( voltageSensorParam > 0 ) then
-		local voltagePerCellAveragedString = string.format("%4.2f",voltagePerCellAveraged)
-		local voltageSensorValueString = string.format("%02.1f",voltageSensorValue)
+	local voltageBarFillRatio = ((setupvars.voltagePerCellAveraged - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100
+	local voltageBarDeltaX = (voltageBarFillRatio*(voltageBarWidth-2))//100
+	local restingVoltageTickX = (((restingVoltageTick - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
+	local minVoltageValueX = (((setupvars.minVoltagePerCell - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
+	local maxVoltageValueX = (((setupvars.maxVoltagePerCell - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
 
-		--lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltagePerCellAveragedString))*0.5,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MAXI,voltagePerCellAveragedString)-8,voltagePerCellAveragedString,FONT_MAXI)
-		--lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltagePerCellAveragedString))*0.5 + 68,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_BIG,"V")-17,"V",FONT_BIG)
+	if( setupvars.voltageSensor[1] ~= 0 ) then
+		voltageSensorValueString = string.format("%02.1f",setupvars.voltageSensorValue)
+
 		lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltageSensorValueString))*0.5,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MAXI,voltageSensorValueString)-8,voltageSensorValueString,FONT_MAXI)
 		lcd.drawText(panel_03_R_X + (panel_03_R_Width - lcd.getTextWidth(FONT_MAXI,voltageSensorValueString))*0.5 + 68,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_BIG,"V")-17,"V",FONT_BIG)
 		
-		lcd.drawText(panel_03_R_X+4,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MINI,trans21.cell)-9,trans21.cell,FONT_MINI)
-		lcd.drawText(panel_03_R_X+4,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MINI,trans21.cellVolt)+2,trans21.cellVolt,FONT_MINI)
+		lcd.drawText(panel_03_R_X+4,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MINI,setupvars.trans.cell)-9,setupvars.trans.cell,FONT_MINI)
+		lcd.drawText(panel_03_R_X+4,panel_03_R_Y + panel_03_R_Height - lcd.getTextHeight(FONT_MINI,setupvars.trans.cellVolt)+2,setupvars.trans.cellVolt,FONT_MINI)
 		
 		lcd.drawText(panel_03_R_X + panel_03_R_Width - lcd.getTextWidth(FONT_MINI,"min")-7,panel_03_R_Y+panel_03_R_Height-18,"min",FONT_MINI)
 		lcd.drawText(panel_03_R_X + panel_03_R_Width - lcd.getTextWidth(FONT_MINI,"max")-5,panel_03_R_Y+panel_03_R_Height-10,"max",FONT_MINI)
 
 		lcd.drawText(panel_03_R_X+64,panel_03_R_Y+panel_03_R_Height-16,"/",FONT_NORMAL)
 		lcd.setColor(green_r,green_g,green_b)
-		if (maxVoltagePerCell == -1.0) then
+		if (setupvars.maxVoltagePerCell == -1.0) then
 			lcd.drawText(panel_03_R_X+75,panel_03_R_Y+panel_03_R_Height-16,"----",FONT_BOLD)
 		else
-			lcd.drawText(panel_03_R_X+71,panel_03_R_Y+panel_03_R_Height-16,string.format("%4.2f",maxVoltagePerCell),FONT_BOLD)
+			lcd.drawText(panel_03_R_X+71,panel_03_R_Y+panel_03_R_Height-16,string.format("%02.2f",setupvars.maxVoltagePerCell),FONT_BOLD)
 		end
 		lcd.setColor(red_r,red_g,red_b)
-		if (minVoltagePerCell == 99.9) then
+		if (setupvars.minVoltagePerCell == 99.9) then
 			lcd.drawText(panel_03_R_X+41,panel_03_R_Y+panel_03_R_Height-16,"----",FONT_BOLD)
 		else
-			lcd.drawText(panel_03_R_X+34,panel_03_R_Y+panel_03_R_Height-16,string.format("%4.2f",minVoltagePerCell),FONT_BOLD)
+			lcd.drawText(panel_03_R_X+34,panel_03_R_Y+panel_03_R_Height-16,string.format("%02.2f",setupvars.minVoltagePerCell),FONT_BOLD)
 		end
 		lcd.setColor(base_r,base_g,base_b)
 		
 		
-		local voltageBarWidth = 76
-		local voltageBarHeight = 7
-		
-		local voltageBarX = panel_03_R_X + (panel_03_R_Width - voltageBarWidth)*0.5 
-		local voltageBarY = panel_03_R_Y+5
-		
-		local minVoltageValueBar = 3.20
-		local maxVoltageValueBar = 4.20
-		local restingVoltageTick = 3.75
-		
 		lcd.drawRectangle(voltageBarX,voltageBarY,voltageBarWidth,voltageBarHeight)
-		lcd.drawText(voltageBarX-23,voltageBarY-3,string.format("%4.2f",minVoltageValueBar),FONT_MINI)
-		lcd.drawText(voltageBarX+voltageBarWidth+2,voltageBarY-3,string.format("%4.2f",maxVoltageValueBar),FONT_MINI)
-		
-		local voltageBarFillRatio = ((voltagePerCellAveraged - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100
+		lcd.drawText(voltageBarX-23,voltageBarY-3,string.format("%02.2f",minVoltageValueBar),FONT_MINI)
+		lcd.drawText(voltageBarX+voltageBarWidth+2,voltageBarY-3,string.format("%02.2f",maxVoltageValueBar),FONT_MINI)
 		
 		if (voltageBarFillRatio >= 0 and voltageBarFillRatio <= 100) then
 			voltageBarFillRatio = voltageBarFillRatio
@@ -2128,28 +698,24 @@ local function printTelemetryWindow()
 			voltageBarFillRatio = 0
 		end
 		
-		local voltageBarDeltaX = (voltageBarFillRatio*(voltageBarWidth-2))//100
 		lcd.setColor(voltage_r,voltage_g,voltage_b)
 			
 		lcd.drawFilledRectangle(voltageBarX+1,voltageBarY+1,voltageBarDeltaX,voltageBarHeight-2)
 		lcd.setColor(base_r,base_g,base_b)
 		
-		local restingVoltageTickX = (((restingVoltageTick - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
 		lcd.setColor(base_r,base_g,base_b)
 		lcd.drawLine(voltageBarX+1+restingVoltageTickX,voltageBarY+1,voltageBarX+1+restingVoltageTickX,voltageBarY+voltageBarHeight-2)
 		lcd.setColor(base_r,base_g,base_b)
 		
-		local minVoltageValueX = (((minVoltagePerCell - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
 		lcd.setColor(red_r,red_g,red_b)
 		lcd.drawFilledRectangle(voltageBarX+1+minVoltageValueX,voltageBarY+1,3,voltageBarHeight-2)
 		lcd.setColor(base_r,base_g,base_b)
 		
-		local maxVoltageValueX = (((maxVoltagePerCell - minVoltageValueBar) / (maxVoltageValueBar-minVoltageValueBar))*100) * (voltageBarWidth-2)//100
 		lcd.setColor(green_r,green_g,green_b)
 		lcd.drawFilledRectangle(voltageBarX+1+maxVoltageValueX,voltageBarY+1,3,voltageBarHeight-2)
 		lcd.setColor(base_r,base_g,base_b)
 	end	
-		
+
 ----------------------------------------------------
 		
 	local panel_central_Width = screenMaxX - panel_01_L_Width - panel_01_R_Width
@@ -2157,46 +723,876 @@ local function printTelemetryWindow()
 	local panel_central_X = panel_01_L_Width
 	local panel_central_Y = 0
 	
-	--local batteryPercentageString = string.format("%2.0f",batteryPercentage)
-	--batteryPercentage =0.6
-	--batteryPercentageRounded = math.floor(batteryPercentage + 0.5)
-	local batteryPercentageString = string.format("%i",batteryPercentageRounded)
-	
-	if (hasRxBeenPoweredOn == true and batteryPercentageRounded <= alarmCapacityLevelFive and batteryPercentageRounded > alarmCapacityLevelSix and batteryCapacityUsedTotal > 0) then
-		lcd.setColor(orange_r,orange_g,orange_b)
-	elseif (hasRxBeenPoweredOn == true and batteryPercentageRounded <= alarmCapacityLevelSix and batteryCapacityUsedTotal > 0) then
-		lcd.setColor(red_r,red_g,red_b)
-	elseif (hasRxBeenPoweredOn == true and batteryPercentageRounded >= alarmCapacityLevelFive) then
-		lcd.setColor(green_r,green_g,green_b)
-	else
-		lcd.setColor(base_r,base_g,base_b)
+	local batteryPercentageString = string.format("%i",setupvars.batteryPercentageRounded)
+	lcd.setColor( getBatteryLevel() )
+	if( setupvars.telemetryActive == true and setupvars.capacitySensor[1] ~= 0 ) then
+		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MAXI,batteryPercentageString))*0.5+lcd.getTextWidth(FONT_MAXI,batteryPercentageString)-1,panel_central_Y + (panel_central_Height - lcd.getTextHeight(FONT_NORMAL,"%"))*0.5-8,"%",FONT_NORMAL)
+		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MAXI,batteryPercentageString))*0.5-2,panel_central_Y-5,batteryPercentageString,FONT_MAXI)
 	end
-
-
-	lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MAXI,batteryPercentageString))*0.5+lcd.getTextWidth(FONT_MAXI,batteryPercentageString)-1,panel_central_Y + (panel_central_Height - lcd.getTextHeight(FONT_NORMAL,"%"))*0.5-8,"%",FONT_NORMAL)
-	lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MAXI,batteryPercentageString))*0.5-2,panel_central_Y-5,batteryPercentageString,FONT_MAXI)
-	
 	lcd.setColor(base_r,base_g,base_b)
 	
-	if (telemetryActive == true and estimateUsedLipoBoolean == true and voltagePerCellAtStartup < (voltageThresholdUsedLipo/100)) then
+	if( setupvars.telemetryActive == true and setupvars.alarmUsedLipo[1] == 1 and setupvars.voltagePerCellAtStartup < (setupvars.alarmUsedLipo[2]/100)) then
 		lcd.setColor(red_r,red_g,red_b)
-		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,trans21.usedBattery1))*0.5,panel_central_Y+batterySymbolY+10,trans21.usedBattery1,FONT_MINI)
-		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,trans21.usedBattery2))*0.5,panel_central_Y+batterySymbolY+22,trans21.usedBattery2,FONT_MINI)
-		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,trans21.usedBattery3))*0.5,panel_central_Y+batterySymbolY+34,trans21.usedBattery3,FONT_MINI)
-		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,trans21.usedBattery4))*0.5,panel_central_Y+batterySymbolY+46,trans21.usedBattery4,FONT_MINI)
+		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,setupvars.trans.usedBattery1))*0.5,panel_central_Y+batterySymbolY+10,setupvars.trans.usedBattery1,FONT_MINI)
+		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,setupvars.trans.usedBattery2))*0.5,panel_central_Y+batterySymbolY+22,setupvars.trans.usedBattery2,FONT_MINI)
+		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,setupvars.trans.usedBattery3))*0.5,panel_central_Y+batterySymbolY+34,setupvars.trans.usedBattery3,FONT_MINI)
+		lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,setupvars.trans.usedBattery4))*0.5,panel_central_Y+batterySymbolY+46,setupvars.trans.usedBattery4,FONT_MINI)
 		lcd.setColor(base_r,base_g,base_b)
 	end
-	
-	local lipoCapacityString = string.format("%i",lipoCapacity)
-    local lipoCellCountString = string.format("%iS",lipoCellCount)
+
+	local lipoCapacityString = string.format("%i",setupvars.lipo[2])
+    local lipoCellCountString = string.format("%iS",setupvars.lipo[1])
 	
 	lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_NORMAL,lipoCapacityString))*0.5,panel_central_Y+batterySymbolHeight-15,lipoCapacityString,FONT_NORMAL)
 	lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_MINI,"mAh"))*0.5,panel_central_Y+batterySymbolHeight+2,"mAh",FONT_MINI)
 	lcd.drawText(panel_central_X + (panel_central_Width - lcd.getTextWidth(FONT_NORMAL,lipoCellCountString))*0.5,panel_central_Y+batterySymbolHeight+17,lipoCellCountString,FONT_NORMAL)
 
+	collectgarbage()
+
 end
 --------------------------------------------------------------------------------------------
 
+local isAlarmCapacityOneActive = false
+local isAlarmCapacityTwoActive = false
+local isAlarmCapacityThreeActive = false
+local isAlarmCapacityFourActive = false
+local isAlarmCapacityFiveActive = false
+local isAlarmCapacitySixActive = false
+
+local function resetActiveCapacityAlarms()
+	print( "resetActiveCapacityAlarms" )
+	isAlarmCapacityOneActive = false
+	isAlarmCapacityTwoActive = false
+	isAlarmCapacityThreeActive = false
+	isAlarmCapacityFourActive = false
+	isAlarmCapacityFiveActive = false
+	isAlarmCapacitySixActive = false
+end
+
+--------------------------------------------------------------------------------------------
+-- Audible alarm function
+--------------------------------------------------------------------------------------------
+local function playVoiceAlarms()
+
+	if (setupvars.telemetryActive == true and isAlarmCapacityOneActive == false and setupvars.batteryPercentageRounded <= setupvars.alarmCapacityLevel[1] and setupvars.batteryPercentageRounded > setupvars.alarmCapacityLevel[2] and setupvars.effectivePercentageAtStartUp > setupvars.alarmCapacityLevel[1]) then
+		system.playNumber(setupvars.batteryPercentageRounded, 0, "%", setupvars.trans.capacityUnit)
+		system.vibration(true,4)
+		isAlarmCapacityOneActive=true
+		print( setupvars.batteryPercentageRounded, " isAlarmCapacityOneActive", isAlarmCapacityOneActive )   
+	elseif (setupvars.telemetryActive == true and isAlarmCapacityTwoActive == false and setupvars.batteryPercentageRounded <= setupvars.alarmCapacityLevel[2] and setupvars.batteryPercentageRounded > setupvars.alarmCapacityLevel[3] and setupvars.effectivePercentageAtStartUp > setupvars.alarmCapacityLevel[2]) then
+		system.playNumber(setupvars.batteryPercentageRounded, 0, "%", setupvars.trans.capacityUnit)
+		system.vibration(true,4)
+		isAlarmCapacityTwoActive=true   
+		print( setupvars.batteryPercentageRounded, " isAlarmCapacityTwoActive", isAlarmCapacityTwoActive )   
+	elseif (setupvars.telemetryActive == true and isAlarmCapacityThreeActive == false and setupvars.batteryPercentageRounded <= setupvars.alarmCapacityLevel[3] and setupvars.batteryPercentageRounded > setupvars.alarmCapacityLevel[4] and setupvars.effectivePercentageAtStartUp > setupvars.alarmCapacityLevel[3]) then
+		system.playNumber(setupvars.batteryPercentageRounded, 0, "%", setupvars.trans.capacityUnit)
+		system.vibration(true,4)
+		isAlarmCapacityThreeActive=true   
+		print( setupvars.batteryPercentageRounded, " isAlarmCapacityThreeActive", isAlarmCapacityThreeActive )   
+	elseif (setupvars.telemetryActive == true and isAlarmCapacityFourActive == false and setupvars.batteryPercentageRounded <= setupvars.alarmCapacityLevel[4] and setupvars.batteryPercentageRounded > setupvars.alarmCapacityLevel[5] and setupvars.effectivePercentageAtStartUp > setupvars.alarmCapacityLevel[4]) then
+		system.playNumber(setupvars.batteryPercentageRounded, 0, "%", setupvars.trans.capacityUnit)
+		system.vibration(true,4)
+		isAlarmCapacityFourActive=true   
+		print( setupvars.batteryPercentageRounded, " isAlarmCapacityFourActive", isAlarmCapacityFourActive )   
+	elseif (setupvars.telemetryActive == true and isAlarmCapacityFiveActive == false and setupvars.batteryPercentageRounded <= setupvars.alarmCapacityLevel[5] and setupvars.batteryPercentageRounded > setupvars.alarmCapacityLevel[6] and setupvars.effectivePercentageAtStartUp > setupvars.alarmCapacityLevel[5]) then
+		system.playNumber(setupvars.batteryPercentageRounded, 0, "%", setupvars.trans.capacityUnit)
+		system.vibration(true,4)
+		isAlarmCapacityFiveActive=true   
+		print( setupvars.batteryPercentageRounded, " isAlarmCapacityFiveActive", isAlarmCapacityFiveActive )   
+	elseif (setupvars.telemetryActive == true and isAlarmCapacitySixActive == false and isAlarmCapacityFiveActive == true and setupvars.batteryPercentageRounded <= setupvars.alarmCapacityLevel[6]) then
+		system.playNumber(setupvars.batteryPercentageRounded, 0, "%", setupvars.trans.capacityUnit)
+		system.vibration(true,4)
+		isAlarmCapacitySixActive=true   
+		print( setupvars.batteryPercentageRounded, " isAlarmCapacitySixActive", isAlarmCapacitySixActive )  
+	end
+
+	collectgarbage()
+	
+end
+--------------------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------
+-- Function resets telemetry min/max values
+--------------------------------------------------------------------------------------------
+local function resetTelemetryValues()
+	setupvars.minVoltagePerCell = 99.9
+	setupvars.maxVoltagePerCell = -1.0
+	setupvars.rx_1_Q_min = 0
+	setupvars.rx_1_RSSI_A1_min = 1000
+	setupvars.rx_1_RSSI_A2_min = 1000
+	setupvars.rx_1_Voltage_min = 99.9
+	setupvars.rx_1_Voltage_max = -1.0
+	setupvars.escCurrentMax = -1.0
+	setupvars.escTempMax = -1
+	setupvars.escThrottleMax = -1
+	setupvars.vibrationsMax = -1
+	setupvars.hightMax = -1
+	setupvars.rpmMax = -1
+	setupvars.elevatorRateMin = 1e6
+	setupvars.elevatorRateMax = -1e6
+	setupvars.aileronRateMin = 1e6
+	setupvars.aileronRateMax = -1e6
+	setupvars.rudderRateMin = 1e6
+	setupvars.rudderRateMax = -1e6
+	setupvars.hasRxBeenPoweredOn = false
+	setupvars.batteryPercentageRounded = 0
+end
+--------------------------------------------------------------------------------------------
+
+local function initSetupVars()
+	print("initSetupVars()")
+	setupvars.telemetryActive = false
+
+	setupvars.alarmCapacityLevelOne = 80
+	setupvars.alarmCapacityLevelTwo = 60
+	setupvars.alarmCapacityLevelThree = 40
+	setupvars.alarmCapacityLevelFour = 20
+	setupvars.alarmCapacityLevelFive = 5
+	setupvars.alarmCapacityLevelSix = 0
+
+	setupvars.escCurrent = 0.0
+	setupvars.escTemp = 0.0
+	setupvars.escThrottle = 0
+	setupvars.vibrations = 0
+	setupvars.hight = 0
+	setupvars.rpm = 0
+	setupvars.elevatorRate = 0
+	setupvars.aileronRate = 0
+	setupvars.rudderRate = 0
+
+	resetTelemetryValues()
+
+	setupvars.voltagePerCellAtStartup = 0.0
+	setupvars.batteryCapacityUsedTotal = 0
+	setupvars.voltageSensorValue = 0.0
+	setupvars.rx_1_RSSI_A1 = 0
+	setupvars.rx_1_RSSI_A1_min = 0
+	if( debugOn ) then
+		setupvars.rx_1_RSSI_A2 = 35
+	else
+		setupvars.rx_1_RSSI_A2 = 0
+	end
+	setupvars.rx_1_RSSI_A2_min = 0
+	setupvars.rx_1_Q = 0
+	setupvars.rx_1_Q_min = 0
+	setupvars.rx_1_Voltage_Averaged = 0.0
+	setupvars.voltagePerCellAveraged = 0.0
+	setupvars.effectivePercentageAtStartUp = 0
+	if( setupvars.timer[1] == 2) then
+		setupvars.timeCounter = setupvars.timer[2]
+	else
+		setupvars.timeCounter = 0
+	end
+end
+
+local function resetActiveTimerAlarms()
+	print( "resetActiveTimerAlarms", #isAlarmActive )
+    for i = 1, #timerVTable do 
+    	isAlarmActive[i] = false
+    end
+end
+
+--------------------------------------------------------------------------------------------
+-- Converts voltage reading to a percentage (code from Tero @ RC-Thoughts.com)
+--------------------------------------------------------------------------------------------
+local percentList={{3,0},{3.093,1},{3.196,2},{3.301,3},{3.401,4},{3.477,5},{3.544,6},{3.601,7},{3.637,8},{3.664,9},{3.679,10},{3.683,11},{3.689,12},{3.692,13},{3.705,14},{3.71,15},{3.713,16},{3.715,17},{3.72,18},{3.731,19},{3.735,20},{3.744,21},{3.753,22},{3.756,23},{3.758,24},{3.762,25},{3.767,26},{3.774,27},{3.78,28},{3.783,29},{3.786,30},{3.789,31},{3.794,32},{3.797,33},{3.8,34},{3.802,35},{3.805,36},{3.808,37},{3.811,38},{3.815,39},{3.818,40},{3.822,41},{3.825,42},{3.829,43},{3.833,44},{3.836,45},{3.84,46},{3.843,47},{3.847,48},{3.85,49},{3.854,50},{3.857,51},{3.86,52},{3.863,53},{3.866,54},{3.87,55},{3.874,56},{3.879,57},{3.888,58},{3.893,59},{3.897,60},{3.902,61},{3.906,62},{3.911,63},{3.918,64},{3.923,65},{3.928,66},{3.939,67},{3.943,68},{3.949,69},{3.955,70},{3.961,71},{3.968,72},{3.974,73},{3.981,74},{3.987,75},{3.994,76},{4.001,77},{4.007,78},{4.014,79},{4.021,80},{4.029,81},{4.036,82},{4.044,83},{4.052,84},{4.062,85},{4.074,86},{4.085,87},{4.095,88},{4.105,89},{4.111,90},{4.116,91},{4.12,92},{4.125,93},{4.129,94},{4.135,95},{4.145,96},{4.176,97},{4.179,98},{4.193,99},{4.2,100}}
+local function voltageAsAPercentage(value)
+	
+    local result=0
+    if(value > 4.2 or value < 3.00)then
+        if(value > 4.2)then
+            result=100
+        end
+        if(value < 3.00)then
+            result=0
+        end
+    else
+        for index,entry in ipairs(percentList) do
+            if(entry[1] >= value)then
+                result=entry[2]
+                break
+            end
+        end
+    end
+	
+    collectgarbage()
+	
+    return result
+
+end
+--------------------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------
+-- Function that tracks Tx time counter, and saves the time at which the Rx is detected.
+-- This allows the app to apply the user defined time delay, as well reset the min/max
+-- values when a new lipo is plugged in. (Called by the Jeti loop function).
+--------------------------------------------------------------------------------------------
+local function trackTimeAndResetValues()
+	local currentTime = 0
+	local voltageSensorTable
+	local sensorsRx
+
+	currentTime = system.getTimeCounter() * 1E-3
+	sensorsRx = system.getTxTelemetry()
+	if( debugOn ) then
+		sensorsRx.rx1Percent = 80
+	end
+
+	if(sensorsRx.rx1Percent > 1) then
+		isRxPoweredOn = true
+    else
+		isRxPoweredOn = false
+    end
+
+	if (setupvars.hasRxBeenPoweredOn == false and isRxPoweredOn == true) then
+		timeAtPowerOn = currentTime
+		if( setupvars.timer[1] == 2) then
+			setupvars.timeCounter = setupvars.timer[2]
+		else
+			setupvars.timeCounter = 0
+		end
+	end
+	
+	
+	if(isRxPoweredOn == true) then
+		setupvars.hasRxBeenPoweredOn = true
+    end
+			
+	if (setupvars.hasRxBeenPoweredOn == true and isRxPoweredOn == false) then
+		resetRx = true
+	end
+		
+	if (resetRx == true)  then
+		if (isRxPoweredOn == true) then
+			resetRx = false
+			hasVoltageStartupBeenRead = false
+			timeAtPowerOn = currentTime
+			if( setupvars.timer[1] == 2) then
+				setupvars.timeCounter = setupvars.timer[2]
+			else
+				setupvars.timeCounter = 0
+			end
+			resetTelemetryValues()
+			isAlarmUsedLipoDetectedActive = false
+			--if( Screen ) then
+			--	Screen.resetActiveAlarms()
+			--end
+			resetActiveCapacityAlarms()
+			resetActiveTimerAlarms()
+		end
+	end
+	
+	if (isRxPoweredOn == false) then
+		voltagePerCell = 0.0
+		setupvars.voltagePerCellAtStartup = 0.0
+		batteryCapacityPercentAtStartup = 0
+		batteryCapacityUsedAtStartup = 0
+
+		setupvars.voltagePerCellAveraged = 0.0
+		setupvars.rx_1_Voltage_Averaged = 0.0
+		setupvars.escCurrent = 0.0
+		setupvars.escTemp = 0
+		setupvars.escThrottle = 0
+		setupvars.vibrations = 0
+		setupvars.hight = 0
+		setupvars.rpm = 0.0
+	end
+
+	if (isRxPoweredOn == true) and (currentTime > (timeAtPowerOn + setupvars.timeDelay)) and (setupvars.telemetryActive == false) then
+		setupvars.telemetryActive = true
+		print("telemetryActive")
+	elseif (isRxPoweredOn == false) then --or (currentTime < (timeAtPowerOn + setupvars.timeDelay)) then
+		setupvars.telemetryActive = false
+    end
+
+	local effectiveLipoCapacity = 0.8 * setupvars.lipo[2]
+
+	if (setupvars.telemetryActive == true) and (hasVoltageStartupBeenRead == false) then
+		if(setupvars.voltageSensor[1] == 999) then
+			if (setupvars.voltageSensor[2] == 1) then
+				voltageSensorValue = sensorsRx.rx1Voltage
+			elseif (setupvars.voltageSensor[2] == 2) then
+				voltageSensorValue = sensorsRx.rx2Voltage
+			elseif (setupvars.voltageSensor[2] == 3) then
+				voltageSensorValue = sensorsRx.rxBVoltage
+			end
+		else
+			if( debugOn ) then
+				setupvars.voltageSensorValue = debugVoltage
+				print( "set debug Voltage")
+			else
+				voltageSensorTable = system.getSensorByID(setupvars.voltageSensor[1],setupvars.voltageSensor[2])
+				if (voltageSensorTable) then
+					setupvars.voltageSensorValue = voltageSensorTable.value
+				end
+			end
+		end
+		
+		if (setupvars.voltageSensor[1] ~= 0) then
+			setupvars.voltagePerCellAtStartup = setupvars.voltageSensorValue / setupvars.lipo[1]
+			batteryCapacityPercentAtStartup = voltageAsAPercentage(setupvars.voltagePerCellAtStartup)
+			batteryCapacityUsedAtStartup = setupvars.lipo[2] - (setupvars.lipo[2] * (batteryCapacityPercentAtStartup/100))
+			setupvars.effectivePercentageAtStartUp = (1-(batteryCapacityUsedAtStartup / effectiveLipoCapacity))*100
+			print( setupvars.voltagePerCellAtStartup, batteryCapacityPercentAtStartup, batteryCapacityUsedAtStartup, setupvars.effectivePercentageAtStartUp)
+		end
+		hasVoltageStartupBeenRead = true
+	end
+
+	local effectivePercentageAtStartUpRounded = math.floor(setupvars.effectivePercentageAtStartUp + 0.5)
+
+	if (setupvars.telemetryActive == true and isAlarmUsedLipoDetectedActive == false and setupvars.alarmUsedLipo[3]~="" and setupvars.alarmUsedLipo[1] == 1 and setupvars.voltagePerCellAtStartup < (setupvars.alarmUsedLipo[2]/100)) then
+		system.playFile(setupvars.alarmUsedLipo[3],AUDIO_QUEUE)
+		system.playNumber(effectivePercentageAtStartUpRounded,0,"%")
+		system.vibration(true,4)
+		print("used Battery Alarm")
+		isAlarmUsedLipoDetectedActive=true   
+	end
+	if (setupvars.alarmUsedLipo[1] == 0) then
+		setupvars.effectivePercentageAtStartUp = 100
+	end
+	
+	flightTimerActive = system.getInputsVal(setupvars.switchStartTimer)
+	resetTimer = system.getInputsVal(setupvars.switchResetTimer)
+
+	local delta = currentTime - lastTime
+	lastTime = currentTime
+
+	if (avgTime == 0) then 
+		avgTime = delta
+	else 
+		avgTime = avgTime * 0.95 + delta * 0.05
+	end
+	
+	if (flightTimerActive == 1) then
+		if( setupvars.timer[1] == 2) then
+			setupvars.timeCounter = setupvars.timeCounter - delta
+		else
+			setupvars.timeCounter = setupvars.timeCounter + delta
+		end
+		--print( setupvars.timeCounter )
+	else
+		setupvars.timeCounter = setupvars.timeCounter
+	end
+
+	local timeDiff = setupvars.timeCounter
+	if( setupvars.timer[1] == 2) then
+		timeDiff = setupvars.timer[2] - setupvars.timeCounter
+	end
+    if (timeDiff >= setupvars.flightCounter[1]) and countSet == 0 and flightTimerActive == 1 then
+        setupvars.flightCounter[2] = setupvars.flightCounter[2] + 1
+    	print( string.format("Flightcounter: %d", setupvars.flightCounter[2]) )
+        system.pSave("flightCounter", setupvars.flightCounter)
+        countSet = 1
+    end
+
+	if (resetTimer == 1 and flightTimerActive ~= 1) then
+		if( setupvars.timer[1] == 2) then
+			setupvars.timeCounter = setupvars.timer[2]
+		else
+			setupvars.timeCounter = 0
+		end
+	    countSet = 0
+		--if( Screen ) then
+		--	Screen.resetActiveAlarms()
+		--end
+		resetActiveCapacityAlarms()
+		resetActiveTimerAlarms()
+	end	
+
+	collectgarbage()
+end
+------------------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------
+-- Function that averages the voltage reading (if desired by the user).
+--------------------------------------------------------------------------------------------
+local function averagingFunctionVoltage(value)
+    local sum_values = 0.0
+	local result = 0.0
+	result = value
+	if (#value_list_cell_voltages == (averagingWindowCellVoltage)) then
+		table.remove(value_list_cell_voltages,1)
+		collectgarbage()
+	end    
+	value_list_cell_voltages[#value_list_cell_voltages + 1] = value
+	for i,entry in pairs(value_list_cell_voltages) do
+		sum_values = sum_values + entry
+	end
+	result = sum_values / #value_list_cell_voltages
+	collectgarbage()
+	return result
+end    
+--------------------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------
+-- Function that averages the Rx voltage reading (if desired by the user).
+--------------------------------------------------------------------------------------------
+local function averagingFunctionRxVoltage(value)
+	local sum_values = 0.0
+	local result = 0.0
+	result = value
+	if (#value_list_rx_1_voltages == (averagingWindowCellVoltage)) then
+		table.remove(value_list_rx_1_voltages,1)
+		collectgarbage()
+	end    
+	value_list_rx_1_voltages[#value_list_rx_1_voltages + 1] = value
+	for i,entry in pairs(value_list_rx_1_voltages) do
+		sum_values = sum_values + entry
+	end
+	result = sum_values / #value_list_rx_1_voltages
+	collectgarbage()
+	return result
+end    
+--------------------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------
+-- Main function that reads the voltage reading (called by the Jeti loop function).
+--------------------------------------------------------------------------------------------
+local voltageSensorTable = {}
+local currentSensorTable = {}
+local capacitySensorTable = {}
+local temperatureSensorTable = {}
+local throttleSensorTable = {}
+local vibrationsSensorTable = {}
+local maltiSensorTable = {}
+local rpmSensorTable = {}
+local elevatorSensorTable = {}
+local aileronSensorTable = {}
+local rudderSensorTable = {}
+
+local sensorsRx = {}
+local rx_1_Voltage = 0.0
+
+local function updateTelemetrySensors()
+
+	if(setupvars.voltageSensor[1] == 999) then
+		print("getTxTelemetry")
+		sensorsRx = system.getTxTelemetry()
+		
+		if (setupvars.voltageSensor[2] == 1) then
+			setupvars.voltageSensorValue = sensorsRx.rx1Voltage
+		elseif (setupvars.voltageSensor[2] == 2) then
+			setupvars.voltageSensorValue = sensorsRx.rx2Voltage
+		elseif (setupvars.voltageSensor[2] == 3) then
+			setupvars.voltageSensorValue = sensorsRx.rxBVoltage
+		end
+	else
+		voltageSensorTable = system.getSensorByID(setupvars.voltageSensor[1],setupvars.voltageSensor[2])
+		if (voltageSensorTable) then
+			if( debugOn ) then
+				setupvars.voltageSensorValue = debugVoltage
+			else
+				setupvars.voltageSensorValue = voltageSensorTable.value
+			end
+		end
+	end
+		
+	currentSensorTable = system.getSensorByID(setupvars.currentSensor[1],setupvars.currentSensor[2])
+	if (currentSensorTable) then
+		setupvars.escCurrent = currentSensorTable.value
+		if( debugOn ) then
+			setupvars.escCurrent = 22.0
+		end
+	end
+	
+	capacitySensorTable = system.getSensorByID(setupvars.capacitySensor[1],setupvars.capacitySensor[2])
+	if (capacitySensorTable) then
+		if( debugOn and debugCapacity and setupvars.telemetryActive ) then
+			if( batteryCapacityUsed < setupvars.lipo[2] ) then
+				batteryCapacityUsed = batteryCapacityUsed + 1
+				--print( string.format("batteryCapacityUsed: %d (%d)", batteryCapacityUsed, setupvars.lipo[2]) )
+			end
+		else
+			batteryCapacityUsed = capacitySensorTable.value
+		end
+	end
+	
+	temperatureSensorTable = system.getSensorByID(setupvars.temperatureSensor[1],setupvars.temperatureSensor[2])
+	if (temperatureSensorTable) then
+		setupvars.escTemp = temperatureSensorTable.value
+		if( debugOn ) then
+			setupvars.escTemp = 22.0
+		end
+	end
+	
+	throttleSensorTable = system.getSensorByID(setupvars.throttleSensor[1],setupvars.throttleSensor[2])
+	if (throttleSensorTable) then
+		setupvars.escThrottle = throttleSensorTable.value
+		if( debugOn ) then
+			setupvars.escThrottle = 22
+		end
+	end
+	
+	vibrationsSensorTable = system.getSensorByID(setupvars.vibrationsSensor[1],setupvars.vibrationsSensor[2])
+	if (vibrationsSensorTable) then
+		setupvars.vibrations = vibrationsSensorTable.value
+		if( debugOn ) then
+			setupvars.vibrations = 22
+		end
+	end
+	
+	maltiSensorTable = system.getSensorByID(setupvars.maltiSensor[1],setupvars.maltiSensor[2])
+	if (maltiSensorTable) then
+		setupvars.hight = maltiSensorTable.value
+		if( debugOn ) then
+			setupvars.hight = 22
+		end
+	end
+	
+	rpmSensorTable = system.getSensorByID(setupvars.rpmSensor[1],setupvars.rpmSensor[2])
+	if (rpmSensorTable) then
+		setupvars.rpm = rpmSensorTable.value
+		if( debugOn ) then
+			setupvars.rpm = 2200
+		end
+	end
+	
+	elevatorSensorTable = system.getSensorByID(setupvars.elevatorSensor[1],setupvars.elevatorSensor[2])
+	if (elevatorSensorTable) then
+		setupvars.elevatorRate = elevatorSensorTable.value
+		if( debugOn ) then
+			setupvars.elevatorRate = 22
+		end
+	end
+	
+	aileronSensorTable = system.getSensorByID(setupvars.aileronSensor[1],setupvars.aileronSensor[2])
+	if (aileronSensorTable) then
+		setupvars.aileronRate = aileronSensorTable.value
+		if( debugOn ) then
+			setupvars.aileronRate = 22
+		end
+	end
+	
+	rudderSensorTable = system.getSensorByID(setupvars.rudderSensor[1],setupvars.rudderSensor[2])
+	if (rudderSensorTable) then
+		setupvars.rudderRate = rudderSensorTable.value
+		if( debugOn ) then
+			setupvars.rudderRate = 22
+		end
+	end
+	
+	if (setupvars.voltageSensorValue) then
+		voltagePerCell = setupvars.voltageSensorValue / setupvars.lipo[1]
+		setupvars.voltagePerCellAveraged = averagingFunctionVoltage(voltagePerCell)
+	end
+	
+	if (setupvars.telemetryActive and setupvars.voltagePerCellAveraged < setupvars.minVoltagePerCell and voltagePerCell > 0.1) then
+		setupvars.minVoltagePerCell = setupvars.voltagePerCellAveraged
+	end
+	
+	if (setupvars.telemetryActive and setupvars.voltagePerCellAveraged > setupvars.maxVoltagePerCell and voltagePerCell > 0.1) then
+		setupvars.maxVoltagePerCell = setupvars.voltagePerCellAveraged
+	end
+	
+	
+	if (setupvars.alarmUsedLipo[1] == 1 and setupvars.voltagePerCellAtStartup < (setupvars.alarmUsedLipo[2]/100) and setupvars.voltagePerCellAtStartup > 0) then
+		setupvars.batteryCapacityUsedTotal = batteryCapacityUsedAtStartup + batteryCapacityUsed
+	else
+		setupvars.batteryCapacityUsedTotal = batteryCapacityUsed
+	end
+
+	local effectiveLipoCapacity = 0.8 * setupvars.lipo[2]
+
+	if (capacitySensorTable) then
+		if (batteryCapacityUsed and effectiveLipoCapacity) then
+			if (setupvars.batteryCapacityUsedTotal > effectiveLipoCapacity) then
+				batteryPercentage = 0
+			else
+				batteryPercentage = (1 - (setupvars.batteryCapacityUsedTotal / effectiveLipoCapacity))*100
+			end
+		end
+
+		setupvars.batteryPercentageRounded = math.floor(batteryPercentage + 0.5)
+		if (setupvars.batteryPercentageRounded >= 0 and setupvars.batteryPercentageRounded <= 100) then
+			setupvars.batteryPercentageRounded = setupvars.batteryPercentageRounded
+		else
+			setupvars.batteryPercentageRounded = 0
+		end
+	end	
+
+	if (setupvars.telemetryActive and setupvars.escCurrent > setupvars.escCurrentMax) then
+		setupvars.escCurrentMax = setupvars.escCurrent
+	end
+		
+	if (setupvars.telemetryActive and setupvars.escTemp > setupvars.escTempMax) then
+		setupvars.escTempMax = setupvars.escTemp
+	end
+	
+	if (setupvars.telemetryActive and setupvars.escThrottle > setupvars.escThrottleMax) then
+		setupvars.escThrottleMax = setupvars.escThrottle
+	end
+	
+	if (setupvars.telemetryActive and setupvars.vibrations > setupvars.vibrationsMax) then
+		setupvars.vibrationsMax = setupvars.vibrations
+	end
+	
+	if (setupvars.telemetryActive and setupvars.hight > setupvars.hightMax) then
+		setupvars.hightMax = setupvars.hight
+	end
+	
+	if (setupvars.telemetryActive and setupvars.rpm > setupvars.rpmMax) then
+		setupvars.rpmMax = setupvars.rpm
+	end
+	
+	if (setupvars.telemetryActive and setupvars.elevatorRate < setupvars.elevatorRateMin) then
+		setupvars.elevatorRateMin = setupvars.elevatorRate
+	elseif (setupvars.telemetryActive and setupvars.elevatorRate > setupvars.elevatorRateMax) then
+		setupvars.elevatorRateMax = setupvars.elevatorRate
+	end
+	
+	if (setupvars.telemetryActive and setupvars.aileronRate < setupvars.aileronRateMin) then
+		setupvars.aileronRateMin = setupvars.aileronRate
+	elseif (setupvars.telemetryActive and setupvars.aileronRate > setupvars.aileronRateMax) then
+		setupvars.aileronRateMax = setupvars.aileronRate
+	end
+
+	if (setupvars.telemetryActive and setupvars.rudderRate < setupvars.rudderRateMin) then
+		setupvars.rudderRateMin = setupvars.rudderRate
+	elseif (setupvars.telemetryActive and setupvars.rudderRate > setupvars.rudderRateMax) then
+		setupvars.rudderRateMax = setupvars.rudderRate
+	end
+
+	collectgarbage()
+end
+--------------------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------
+-- Function to update Rx telemetry values
+--------------------------------------------------------------------------------------------
+local rx_1_RSSI_A1_delta = 1
+local rx_1_RSSI_A2_delta = -1
+local rx_1_Q_delta = 1
+local sensorsRx = {}
+
+local function updateRxValues()
+
+	sensorsRx = system.getTxTelemetry()
+
+	if( debugOn ) then
+		if( setupvars.rx_1_Q == 0) then
+			rx_1_Q_delta = 1
+			setupvars.rx_1_Q = 1
+		elseif( setupvars.rx_1_Q == 100 ) then
+			rx_1_Q_delta = -1
+			setupvars.rx_1_Q = 99
+		else
+			setupvars.rx_1_Q = setupvars.rx_1_Q + rx_1_Q_delta
+		end
+		rx_1_Voltage = 8.0
+		if( setupvars.rx_1_RSSI_A1 == 0 ) then
+			rx_1_RSSI_A1_delta = 1
+			setupvars.rx_1_RSSI_A1 = 1
+		elseif( setupvars.rx_1_RSSI_A1 == 35 ) then
+			rx_1_RSSI_A1_delta = -1
+			setupvars.rx_1_RSSI_A1 = 34
+		else
+			setupvars.rx_1_RSSI_A1 = setupvars.rx_1_RSSI_A1 + rx_1_RSSI_A1_delta
+		end
+		if( setupvars.rx_1_RSSI_A2 == 0 ) then
+			rx_1_RSSI_A2_delta = 1
+			setupvars.rx_1_RSSI_A2 = 1
+		elseif( setupvars.rx_1_RSSI_A2 == 35 ) then
+			rx_1_RSSI_A2_delta = -1
+			setupvars.rx_1_RSSI_A2 = 34
+		else
+			setupvars.rx_1_RSSI_A2 = setupvars.rx_1_RSSI_A2 + rx_1_RSSI_A2_delta
+		end
+	elseif (sensorsRx) then
+		rx_1_Voltage = sensorsRx.rx1Voltage
+		setupvars.rx_1_Q = sensorsRx.rx1Percent
+		setupvars.rx_1_RSSI_A1 = sensorsRx.RSSI[1]
+		setupvars.rx_1_RSSI_A2 = sensorsRx.RSSI[2]
+	end
+	
+	if (setupvars.telemetryActive == false and isRxPoweredOn == true) then
+		setupvars.rx_1_Voltage_Averaged = rx_1_Voltage
+	elseif (setupvars.telemetryActive == true) then
+		setupvars.rx_1_Voltage_Averaged = averagingFunctionRxVoltage(rx_1_Voltage)
+		--print( string.format("rx_1_Voltrage_Averaged: %f", setupvars.rx_1_Voltage_Averaged) )
+	end
+
+	if (setupvars.telemetryActive and setupvars.rx_1_Q < setupvars.rx_1_Q_min) then
+		setupvars.rx_1_Q_min = setupvars.rx_1_Q
+	end
+	
+	if (setupvars.telemetryActive and setupvars.rx_1_Voltage_Averaged < setupvars.rx_1_Voltage_min) then
+		setupvars.rx_1_Voltage_min = setupvars.rx_1_Voltage_Averaged
+	end
+	
+	if (setupvars.telemetryActive and setupvars.rx_1_Voltage_Averaged > setupvars.rx_1_Voltage_max) then
+		setupvars.rx_1_Voltage_max = setupvars.rx_1_Voltage_Averaged
+	end
+	
+	if (setupvars.telemetryActive and setupvars.rx_1_RSSI_A1 < setupvars.rx_1_RSSI_A1_min) then
+		setupvars.rx_1_RSSI_A1_min = setupvars.rx_1_RSSI_A1
+	end
+	
+	if (setupvars.telemetryActive and setupvars.rx_1_RSSI_A2 < setupvars.rx_1_RSSI_A2_min) then
+		setupvars.rx_1_RSSI_A2_min = setupvars.rx_1_RSSI_A2
+	end	
+
+	collectgarbage()
+end
+--------------------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------
+-- Audible alarm function
+--------------------------------------------------------------------------------------------
+local function playTimerAlarms()
+
+	if( flightTimerActive == 1 and setupvars.timer[1] == 2 ) then
+		--print( "flightTimerActive: ", flightTimerActive )
+		for k, v in ipairs(timerVTable) do
+			--print( k, isAlarmActive[k], math.abs(v["Time"]), setupvars.timeCounter )
+			if( isAlarmActive[k] == false and setupvars.timeCounter <= math.abs(v["Time"]) ) then
+				if v["Type"] == 1 then
+					print( v["Time"], "play beep", v["Freq"], v["Cnt"] - 1, v["Length"] )
+					system.playBeep(v["Cnt"] - 1, v["Freq"], v["Length"])
+					system.vibration(true,4)
+				elseif v["Type"] == 2 then
+					print( v["Time"], "play sound", v["File"] )
+					system.playFile(v["File"], AUDIO_QUEUE)
+				end
+				isAlarmActive[k] = true
+			end
+		end
+	end
+
+	collectgarbage()
+	
+end
+
+--------------------------------------------------------------------------------------------
+
+-- remove unused module
+local function unrequire(module)
+	package.loaded[module] = nil
+	_G[module] = nil
+end
+
+-- switch to setup context
+local function setupForm(formID)
+
+	--Screen = nil					-- comment out if closeForm not available
+	--unrequire("HeliTelm/Screen")		-- comment out if closeForm not available
+	--system.unregisterTelemetry(1)	-- comment out if closeForm not available
+	
+	collectgarbage()
+
+	Form = require "HeliTelm/Form"
+
+	-- return modified data from user
+	setupvars = Form.initForm(setupvars)
+
+	collectgarbage()
+end
+
+-- switch to telemetry context
+local function closeForm()
+	print ("-Lua Form uninitialized-")
+
+	Form = nil
+	unrequire("HeliTelm/Form")
+	
+	collectgarbage()
+	
+	--initSetupVars()
+	--print( "voltageSensor: ", dump(setupvars.voltageSensor) )
+	if( setupvars.timer[1] == 2) then
+		setupvars.timeCounter = setupvars.timer[2]
+	else
+		setupvars.timeCounter = 0
+	end
+
+	-- register telemetry window again after 500 ms
+	--goregisterTelemetry = 500 + system.getTimeCounter() -- used in loop()
+	
+	collectgarbage()
+end
+
+
+-- Telemetry Window
+local function Window()
+
+	--print( "calling Screen.printTelemetryWindow()" )
+	--if( Screen ) then
+	--	Screen.printTelemetryWindow()
+	--end
+
+	printTelemetryWindow()
+
+	collectgarbage()	
+end
+
+-- main loop
+--local debugLocalTime = 0
+local function loop()
+
+	trackTimeAndResetValues()
+	updateRxValues()
+	--if( Screen  ) then
+	--	Screen.playVoiceAlarms()
+	--end
+	playVoiceAlarms()
+	playTimerAlarms()
+	if (setupvars.telemetryActive == true) then
+		updateTelemetrySensors()
+	end
+	
+	-- register telemetry display again after form was closed
+	--[[ 
+	if ( goregisterTelemetry and system.getTimeCounter() > goregisterTelemetry ) then
+		print("register telemetry display again")
+
+		local modelName = system.getProperty("Model")
+		local windowTitle = _appName.." ".._version..".".._screen_version..".".._form_version.." - "..modelName
+
+		Screen = require "HeliTelm/Screen"
+		Screen.init(setupvars)
+		
+		system.registerTelemetry(1, windowTitle, 4, Window)
+
+		goregisterTelemetry = nil
+	end
+	]]--
+
+	--local actualTime = system.getTimeCounter()
+	--if( actualTime >= debugLocalTime + 30000 or debugLocalTime == 0 ) then
+	--	print( string.format("Loop Memory used: %i KB", (collectgarbage("count") * 1024)) )
+	--	debugLocalTime = actualTime
+	--end
+
+	collectgarbage()
+end
+
+function dump(o)
+	local s = ""
+	if type(o) == 'table' then
+		s = '{ '
+		for k,v in pairs(o) do
+			if type(k) ~= 'number' then k = '"'..k..'"' end
+				s = s .. '['..k..'] = ' .. dump(v) .. ','
+		end
+		return s .. '} '
+	else
+		return tostring(o)
+	end
+end
+
+function initTimerV()
+	print( "initTimerV" )
+    local file = io.readall("Config/TimerV.jsn")
+    if( file ~= nil ) then
+	    timerVTable = json.decode(file)
+	    for i = 1, #timerVTable do 
+	    	isAlarmActive[#isAlarmActive + 1] = false
+	    end
+	    print( #timerVTable .. " entries added to timerVTable" )
+	    --print( #isAlarmActive .. " entries added to isAlarmActive" )
+	else
+		print( "no TimerV.jsn found" )
+    end
+end
 
 --------------------------------------------------------------------------------------------
 -- Jeti lua initialization
@@ -2204,112 +1600,80 @@ end
 local function init(code)
 	print ("-Lua application Heli Telem. Display initialized-")
 
-    flightCount = system.pLoad("flightCount", 0)
-    actTime = system.pLoad("actTime", 1)
+	setupvars.voltageSensor     = system.pLoad("voltageSensor",{0,0})
+	setupvars.currentSensor     = system.pLoad("currentSensor",{0,0})
+	setupvars.capacitySensor    = system.pLoad("capacitySensor",{0,0})
+	setupvars.temperatureSensor = system.pLoad("temperatureSensor",{0,0})
+	setupvars.throttleSensor    = system.pLoad("throttleSensor",{0,0})
+	setupvars.rpmSensor         = system.pLoad("rpmSensor",{0,0})
+	setupvars.vibrationsSensor  = system.pLoad("vibrationsSensor",{0,0})
+	setupvars.maltiSensor       = system.pLoad("maltiSensor",{0,0})
+	setupvars.elevatorSensor    = system.pLoad("elevatorSensor",{0,0})
+	setupvars.aileronSensor     = system.pLoad("aileronSensor",{0,0})
+	setupvars.rudderSensor      = system.pLoad("rudderSensor",{0,0})
+
+	setupvars.lipo              = system.pLoad("lipo",{1,0})
+
+	setupvars.timeDelay = system.pLoad("timeDelay",10)
+
+	setupvars.alarmCapacityLevel = system.pLoad("alarmCapacityLevel",{80,60,40,20,5,0})
 	
-	voltageSensorID = system.pLoad("voltageSensorID",0)
-	voltageSensorParam = system.pLoad("voltageSensorParam",0)
-	voltageSensorName = system.pLoad("voltageSensorName","...")
-	voltageSensorLabel = system.pLoad("voltageSensorLabel","...")
+	setupvars.alarmUsedLipo = system.pLoad("alarmUsedLipo",{1,410,""})
 
-	currentSensorID = system.pLoad("currentSensorID",0)
-	currentSensorParam = system.pLoad("currentSensorParam",0)
+	setupvars.switchStartTimer = system.pLoad("switchStartTimer")
+	setupvars.switchResetTimer = system.pLoad("switchResetTimer")
+	setupvars.timer = system.pLoad("timer",{2,450})
 
-	capacitySensorID = system.pLoad("capacitySensorID",0)
-	capacitySensorParam = system.pLoad("capacitySensorParam",0)
+    setupvars.flightCounter = system.pLoad("flightCounter", {0,5})
 
-	temperatureSensorID = system.pLoad("temperatureSensorID",0)
-	temperatureSensorParam = system.pLoad("temperatureSensorParam",0)
-
-	throttleSensorID = system.pLoad("throttleSensorID",0)
-	throttleSensorParam = system.pLoad("throttleSensorParam",0)
-
-	rpmSensorID = system.pLoad("rpmSensorID",0)
-	rpmSensorParam = system.pLoad("rpmSensorParam",0)
-	
-	vibrationsSensorID = system.pLoad("vibrationsSensorID",0)
-	vibrationsSensorParam = system.pLoad("vibrationsSensorParam",0)
-
-	maltiSensorID = system.pLoad("maltiSensorID",0)
-	maltiSensorParam = system.pLoad("maltiSensorParam",0)
-
-	elevatorSensorID = system.pLoad("elevatorSensorID",0)
-	elevatorSensorParam = system.pLoad("elevatorSensorParam",0)
-
-	aileronSensorID = system.pLoad("aileronSensorID",0)
-	aileronSensorParam = system.pLoad("aileronSensorParam",0)
-
-	rudderSensorID = system.pLoad("rudderSensorID",0)
-	rudderSensorParam = system.pLoad("rudderSensorParam",0)
-
-	lipoCellCount = system.pLoad("lipoCellCount",1)
-	lipoCapacity = system.pLoad("lipoCapacity",0)
-	correctionFactor = system.pLoad("correctionFactor",1000)
-	timeDelay = system.pLoad("timeDelay",10)
-	averagingWindowCellVoltage = system.pLoad("averagingWindowCellVoltage",5)
-	averagingWindowRxVoltage = system.pLoad("averagingWindowRxVoltage",5)
-	alarmCapacityLevelOne = system.pLoad("alarmCapacityLevelOne",80)
-	alarmCapacityLevelTwo = system.pLoad("alarmCapacityLevelTwo",60)
-	alarmCapacityLevelThree = system.pLoad("alarmCapacityLevelThree",40)
-	alarmCapacityLevelFour = system.pLoad("alarmCapacityLevelFour",20)
-	alarmCapacityLevelFive = system.pLoad("alarmCapacityLevelFive",5)
-	alarmCapacityLevelSix = system.pLoad("alarmCapacityLevelSix",0)
-	alarmCapacityLevelOneFile = system.pLoad("alarmCapacityLevelOneFile","")
-	alarmCapacityLevelTwoFile = system.pLoad("alarmCapacityLevelTwoFile","")
-	alarmCapacityLevelThreeFile = system.pLoad("alarmCapacityLevelThreeFile","")
-	alarmCapacityLevelFourFile = system.pLoad("alarmCapacityLevelFourFile","")
-	alarmCapacityLevelFiveFile = system.pLoad("alarmCapacityLevelFiveFile","")
-	alarmCapacityLevelSixFile = system.pLoad("alarmCapacityLevelSixFile","")
-	alarmVoltageLevelOne = system.pLoad("alarmVoltageLevelOne",330)
-	
-	estimateUsedLipo = system.pLoad("estimateUsedLipo",0)
-	voltageThresholdUsedLipo = system.pLoad("voltageThresholdUsedLipo",410)
-	alarmUsedLipoDetectedFile = system.pLoad("alarmUsedLipoDetectedFile","")
-	
-	lowVoltageChirp = system.pLoad("lowVoltageChirp",0)
-	
-	switchStartTimer = system.pLoad("switchStartTimer")
-	switchResetTimer = system.pLoad("switchResetTimer")
-	switchResetTelemetryMinMax = system.pLoad("switchResetTelemetryMinMax")
-	switchActivateTelemetryMinMax = system.pLoad("switchActivateTelemetryMinMax")
-
-	system.registerForm(1,MENU_APPS,_appName,initForm,nil,nil,nil)
-
-	if (debugOn == true) then
-		system.registerForm(2,MENU_APPS,_appName.." Debug",nil,nil,printForm,nil)
+    if( debugOn ) then
+    	setupvars.lipo[1] = 6
+    	setupvars.lipo[2] = 1800
+		setupvars.voltageSensor     = {34186242,1} 
+		setupvars.currentSensor     = {34186242,2} 
+		setupvars.capacitySensor    = {34186242,4} 
+		setupvars.temperatureSensor = {34186242,9} 
+		setupvars.throttleSensor    = {34186242,8} 
+		setupvars.rpmSensor         = {34186242,3}
+		setupvars.vibrationsSensor  = {34186242,8}
+		setupvars.maltiSensor       = {34186242,8}
+		setupvars.elevatorSensor    = {34186242,8}
+		setupvars.aileronSensor     = {34186242,8}
+		setupvars.rudderSensor      = {34186242,8}
 	end
+
+	initTimerV()
+
+    initSetupVars()
+
+	resetTelemetryValues()
+
+	system.registerForm(1, MENU_APPS, _appName, setupForm, nil, nil, closeForm)
 
 	local modelName = system.getProperty("Model")
-	local windowTitle = _appName.." ".._version.." - "..modelName
+	--local windowTitle = _appName.." ".._version..".".._screen_version..".".._form_version.." - "..modelName
+	local windowTitle = _appName.." ".._version..".".._form_version.." - "..modelName
+	system.registerTelemetry(1, windowTitle, 4, Window)
 	
-	system.registerTelemetry(2,windowTitle,4,printTelemetryWindow)
+	--Screen = require "HeliTelm/Screen"
+	--Screen.init(setupvars)
 
-	if estimateUsedLipo == 1 then
-		estimateUsedLipoBoolean = true
-	else
-		estimateUsedLipoBoolean = false
-	end
-	
-	if lowVoltageChirp == 1 then
-		lowVoltageChirpBoolean = true
-	else
-		lowVoltageChirpBoolean = false
-	end
-	
-	
+	print( string.format("init Memory used: %i KB", (collectgarbage("count") * 1024)) )
+
 	collectgarbage()
-
 end
 --------------------------------------------------------------------------------------------
-
 
 --------------------------------------------------------------------------------------------
 -- Application interface
 --------------------------------------------------------------------------------------------
-local b = collectgarbage("count")
 setLanguage()
-local a = collectgarbage("count")
-print( a - b )
-_appName = trans21.appName
+_appName = "Telemetry Display"
+--Screen = require "HeliTelm/Screen"
+--_screen_version = Screen.version
+--unrequire( "HeliTelm/Screen" )
+Form = require "HeliTelm/Form"
+_form_version = Form.version
+unrequire( "HeliTelm/Form" )
 return {init = init, loop = loop, author = "Michael Leopoldseder", version = _version, name = _appName}
 --------------------------------------------------------------------------------------------
