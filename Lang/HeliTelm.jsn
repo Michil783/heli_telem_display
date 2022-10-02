@@ -1,7 +1,6 @@
 {
   "default":"en",
   "en":{
-    "appName":"Heli Telem. Display",
     "sensors":"Select telemetry sensors",
     "voltage":"ESC Voltage (V)",
     "capacity":"ESC Lipo Used (mAh)",
@@ -42,6 +41,7 @@
     "lowThreshold":"    Low Voltage Threshold (V)",
     "switches":"Define Switches",
     "startTimer":"Start Flight Timer Switch",
+    "TimerValue":"Timer Value",
     "resetTimer":"Reset Flight Timer Switch",
     "activateMaxMin":"Activate Telem. Max/Min Switch",
     "flightCounter":"Define Flight Counter",
@@ -65,10 +65,11 @@
     "usedBattery2":"fully",
     "usedBattery3":"charged",
     "usedBattery4":"",
-    "fbl":"FBL"
+    "fbl":"FBL",
+    "capacityUnit":"Capacity",
+    "timerEndFile":"Timer end voice file"
   },
   "de":{
-    "appName":"Heli Telem. Display",
     "sensors":"Telemetrie Sensoren Auswahl",
     "voltage":"Akku Spannung (V)",
     "capacity":"Akku Verbrauch (mAh)",
@@ -109,6 +110,7 @@
     "lowThreshold":"    niedrige Zellspannung (V)",
     "switches":"Schalter",
     "startTimer":"Start der Flugzeit",
+    "TimerValue":"Timer Startwert",
     "resetTimer":"Zurücksetzen der Flugzeit",
     "activateMaxMin":"Telem. Max/Min anzeigen",
     "flightCounter":"Flugzähler",
@@ -132,6 +134,8 @@
     "usedBattery2":"nicht",
     "usedBattery3":"vollst.",
     "usedBattery4":"geladen",
-    "fbl":"FBL"
+    "fbl":"FBL",
+    "capacityUnit":"Kapazit",
+    "timerEndFile":"Timer Ende Ansage"
   }
 }
