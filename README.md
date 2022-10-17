@@ -17,6 +17,8 @@ By Michael Leopoldseder forked from the excellent work of Nick Pedersen (https:/
 	v2.06 - 2022-09-06 - get back some PlayVoiceAlarms from Screen and move it to new function PlayTimerAlarms
 	v2.07 - 2022-09-07 - use TimerV.jsn file for countdown alert
 	v2.08 - 2022-10-02 - small optimizations and reintegration of screen.lua (introduced v2.0)
+	v2.09 - 2022-10-16 - error correction for used battery announcement not stored
+	v2.10 - 2022-10-17 - use 100% Lipo capacity instead of 80%
 	
 Instructions: download the file HeliTelm.lua as well as the folder Lang and HeliTelm and copy it to the /Apps folder on your Jeti transmitter. Then install via "User Applications" submenu.
 
