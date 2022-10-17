@@ -23,6 +23,8 @@
 	v2.06 - 2022-09-06 - get back some PlayVoiceAlarms from Screen and move it to new function PlayTimerAlarms
 	v2.07 - 2022-09-07 - use TimerV.jsn file for countdown alert
 	v2.08 - 2022-10-02 - small optimizations and reintegration of screen.lua
+	v2.09 - 2022-10-16 - error correction for used battery announcement not stored
+	v2.10 - 2022-10-17 - use 100% Lipo capacity instead of 80%
 
 		It is a full screen telemetry window, and is hardcoded to display:
 	
@@ -92,8 +94,7 @@
 
 collectgarbage()
 
-local _version = "2.08"
---local _screen_version = "1"
+local _version = "2.10"
 local _form_version = "1"
 local _appName = ""
 
@@ -102,7 +103,6 @@ local debugVoltage = 23.65
 local debugCapacity = true
 
 local setupvars = {}
---local Form, Screen
 local Form
 
 local batteryCapacityUsedAtStartup = 0
@@ -1005,7 +1005,8 @@ local function trackTimeAndResetValues()
 		setupvars.telemetryActive = false
     end
 
-	local effectiveLipoCapacity = 0.8 * setupvars.lipo[2]
+	--local effectiveLipoCapacity = 0.8 * setupvars.lipo[2]
+	local effectiveLipoCapacity = setupvars.lipo[2]
 
 	if (setupvars.telemetryActive == true) and (hasVoltageStartupBeenRead == false) then
 		if(setupvars.voltageSensor[1] == 999) then
@@ -1291,7 +1292,8 @@ local function updateTelemetrySensors()
 		setupvars.batteryCapacityUsedTotal = batteryCapacityUsed
 	end
 
-	local effectiveLipoCapacity = 0.8 * setupvars.lipo[2]
+	--local effectiveLipoCapacity = 0.8 * setupvars.lipo[2]
+	local effectiveLipoCapacity = setupvars.lipo[2]
 
 	if (capacitySensorTable) then
 		if (batteryCapacityUsed and effectiveLipoCapacity) then
@@ -1473,10 +1475,6 @@ end
 -- switch to setup context
 local function setupForm(formID)
 
-	--Screen = nil					-- comment out if closeForm not available
-	--unrequire("HeliTelm/Screen")		-- comment out if closeForm not available
-	--system.unregisterTelemetry(1)	-- comment out if closeForm not available
-	
 	collectgarbage()
 
 	Form = require "HeliTelm/Form"
@@ -1496,28 +1494,18 @@ local function closeForm()
 	
 	collectgarbage()
 	
-	--initSetupVars()
-	--print( "voltageSensor: ", dump(setupvars.voltageSensor) )
 	if( setupvars.timer[1] == 2) then
 		setupvars.timeCounter = setupvars.timer[2]
 	else
 		setupvars.timeCounter = 0
 	end
 
-	-- register telemetry window again after 500 ms
-	--goregisterTelemetry = 500 + system.getTimeCounter() -- used in loop()
-	
 	collectgarbage()
 end
 
 
 -- Telemetry Window
 local function Window()
-
-	--print( "calling Screen.printTelemetryWindow()" )
-	--if( Screen ) then
-	--	Screen.printTelemetryWindow()
-	--end
 
 	printTelemetryWindow()
 
@@ -1530,38 +1518,12 @@ local function loop()
 
 	trackTimeAndResetValues()
 	updateRxValues()
-	--if( Screen  ) then
-	--	Screen.playVoiceAlarms()
-	--end
 	playVoiceAlarms()
 	playTimerAlarms()
 	if (setupvars.telemetryActive == true) then
 		updateTelemetrySensors()
 	end
 	
-	-- register telemetry display again after form was closed
-	--[[ 
-	if ( goregisterTelemetry and system.getTimeCounter() > goregisterTelemetry ) then
-		print("register telemetry display again")
-
-		local modelName = system.getProperty("Model")
-		local windowTitle = _appName.." ".._version..".".._screen_version..".".._form_version.." - "..modelName
-
-		Screen = require "HeliTelm/Screen"
-		Screen.init(setupvars)
-		
-		system.registerTelemetry(1, windowTitle, 4, Window)
-
-		goregisterTelemetry = nil
-	end
-	]]--
-
-	--local actualTime = system.getTimeCounter()
-	--if( actualTime >= debugLocalTime + 30000 or debugLocalTime == 0 ) then
-	--	print( string.format("Loop Memory used: %i KB", (collectgarbage("count") * 1024)) )
-	--	debugLocalTime = actualTime
-	--end
-
 	collectgarbage()
 end
 
@@ -1651,13 +1613,9 @@ local function init(code)
 	system.registerForm(1, MENU_APPS, _appName, setupForm, nil, nil, closeForm)
 
 	local modelName = system.getProperty("Model")
-	--local windowTitle = _appName.." ".._version..".".._screen_version..".".._form_version.." - "..modelName
 	local windowTitle = _appName.." ".._version..".".._form_version.." - "..modelName
 	system.registerTelemetry(1, windowTitle, 4, Window)
 	
-	--Screen = require "HeliTelm/Screen"
-	--Screen.init(setupvars)
-
 	print( string.format("init Memory used: %i KB", (collectgarbage("count") * 1024)) )
 
 	collectgarbage()
@@ -1669,9 +1627,6 @@ end
 --------------------------------------------------------------------------------------------
 setLanguage()
 _appName = "Telemetry Display"
---Screen = require "HeliTelm/Screen"
---_screen_version = Screen.version
---unrequire( "HeliTelm/Screen" )
 Form = require "HeliTelm/Form"
 _form_version = Form.version
 unrequire( "HeliTelm/Form" )
