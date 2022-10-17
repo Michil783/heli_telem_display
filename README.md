@@ -31,7 +31,7 @@ It is a full screen telemetry window, and is changed in some points from Nick Pe
 	
 	- it does not show values for sensor not configured
 	  
-	- includes a flight counter and is show above the flight time
+	- includes a flight counter shown above the flight time
 	  (flight time character set size is reduced)
 	  
 	- most of the min/max values are shown in standard color for better readability
