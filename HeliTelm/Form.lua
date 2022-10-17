@@ -11,10 +11,11 @@
 	3 - 
 	4 - 2022-08-30 - 
 	5 - 2022-09-07 - remove time end sound
-
+	6 - 2022-10-16 - error correction for used battery announcement not stored
+	
 --------------------------------------------------------------------------------------------]]
 
-local _version = 5
+local _version = 6
 
 local setupvars = {}
 local sensorsAvailable = {}
@@ -124,12 +125,12 @@ end
 
 local function voltageThresholdUsedLipoChanged(value)
 	setupvars.alarmUsedLipo[2] = value
-	setupvars.alarmUsedLipo = system.pLoad("alarmUsedLipo",{0,410,""})
+	system.pSave("alarmUsedLipo", setupvars.alarmUsedLipo)
 end
 
 local function alarmUsedLipoDetectedFileChanged(value)
 	setupvars.alarmUsedLipo[3] = value
-	setupvars.alarmUsedLipo = system.pLoad("alarmUsedLipo",{0,410,""})
+	system.pSave("alarmUsedLipo", setupvars.alarmUsedLipo)
 end
 
 local function timeDelayChanged(value)
@@ -207,6 +208,8 @@ local function initForm(vars)
 	print ("-Lua Form initialized-")
 	
 	setupvars = vars
+
+	print( dump(setupvars.alarmUsedLipo))
 
 	local available = system.getSensors()
 
