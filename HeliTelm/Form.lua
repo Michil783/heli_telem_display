@@ -141,6 +141,7 @@ end
 local function switchStartTimerChanged(value)
 	setupvars.switchStartTimer = value
 	system.pSave("switchStartTimer",value)
+	print( "switchStartTimer: "..dump(setupvars.switchStartTimer) )
 end
 
 local function switchUpDownTimerChanged(value)
@@ -156,6 +157,7 @@ end
 local function switchResetTimerChanged(value)
 	setupvars.switchResetTimer = value
 	system.pSave("switchResetTimer",value)
+	print( "switchResetTimer: "..dump(setupvars.switchResetTimer) )
 end
 
 local function alarmCapacityLevelOneChanged(value)
