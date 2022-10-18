@@ -588,7 +588,7 @@ local function printTelemetryWindow()
 		escCurrentString = string.format("%3.1f",setupvars.escCurrent)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(font,escCurrentString)-xOffset,currentSensor_Y,escCurrentString,font)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"A")-xOffset1,currentSensor_Y+fontHeight-fontMiniHeight-displacement,"A",FONT_MINI)
-		escCurrentMaxString = string.format("%3iA",setupvars.escCurrentMax)
+		escCurrentMaxString = string.format("%3i A",setupvars.escCurrentMax)
 		if (setupvars.escCurrentMax == -1.0) then
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- A")-5,currentSensor_Y+fontHeight-fontMiniHeight-displacement,"--- A",FONT_MINI)
 		else
@@ -606,9 +606,9 @@ local function printTelemetryWindow()
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(font,powerString)-xOffset,powerSensor_Y,powerString,font)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"W")-xOffset1,powerSensor_Y+fontHeight-fontMiniHeight-displacement,"W",FONT_MINI)
 		if( setupvars.powerMax >= 1000 ) then 
-			powerMaxString = string.format("%1.2fW", setupvars.powerMax / 1000.0 )
+			powerMaxString = string.format("%1.2f kW", setupvars.powerMax / 1000.0 )
 		else
-			powerMaxString = string.format("%iW",setupvars.powerMax)
+			powerMaxString = string.format("%i W",setupvars.powerMax)
 		end
 		if (setupvars.powerMax == -1.0) then
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- W")-5,powerSensor_Y+fontHeight-fontMiniHeight-displacement,"--- W",FONT_MINI)
@@ -626,9 +626,9 @@ local function printTelemetryWindow()
 		escTempString = string.format("%i",setupvars.escTemp)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(font,escTempString)-xOffset,escTempSensor_Y,escTempString,font)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"°C")-xOffset1,escTempSensor_Y+fontHeight-fontMiniHeight-displacement,"°C",FONT_MINI)
-		escTempMaxString = string.format("%i°C",setupvars.escTempMax)
+		escTempMaxString = string.format("%i °C",setupvars.escTempMax)
 		if (setupvars.escTempMax == -1.0) then
-			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"---°C")-5,escTempSensor_Y+fontHeight-fontMiniHeight-displacement,"---°C",FONT_MINI)
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- °C")-5,escTempSensor_Y+fontHeight-fontMiniHeight-displacement,"--- °C",FONT_MINI)
 		else
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escTempMaxString)-5,escTempSensor_Y+fontHeight-fontMiniHeight-displacement,escTempMaxString,FONT_MINI)
 		end
@@ -643,7 +643,7 @@ local function printTelemetryWindow()
 		escThrottleString = string.format("%i",setupvars.escThrottle)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(font,escThrottleString)-xOffset,escThrottleSensor_Y,escThrottleString,font)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"%")-xOffset1,escThrottleSensor_Y+fontHeight-fontMiniHeight-displacement,"%",FONT_MINI)
-		escThrottleMaxString = string.format("%i%%",setupvars.escThrottleMax)
+		escThrottleMaxString = string.format("%i %%",setupvars.escThrottleMax)
 		if (setupvars.escThrottleMax == -1.0) then
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- %")-3,escThrottleSensor_Y+fontHeight-fontMiniHeight-displacement,"--- %",FONT_MINI)
 		else
@@ -661,7 +661,7 @@ local function printTelemetryWindow()
 		lcd.drawText(panel_02_R_X+(panel_02_R_Width-lcd.getTextWidth(font,hightString))-xOffset,hightSensor_Y,hightString,font)
 		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"m")-xOffset1,hightSensor_Y+fontHeight-fontMiniHeight-displacement,"m",FONT_MINI)
 
-		hightMaxString = string.format("%im",setupvars.hightMax)
+		hightMaxString = string.format("%i m",setupvars.hightMax)
 		if (setupvars.hightMax == -1.0) then
 			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- m")-3,hightSensor_Y+fontHeight-fontMiniHeight-displacement,"--- m",FONT_MINI)
 		else
