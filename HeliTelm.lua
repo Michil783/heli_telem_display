@@ -25,6 +25,7 @@
 	v2.08 - 2022-10-02 - small optimizations and reintegration of screen.lua
 	v2.09 - 2022-10-16 - error correction for used battery announcement not stored
 	v2.10 - 2022-10-17 - use 100% Lipo capacity instead of 80%
+	v2.11 - 2022-10-18 - add log value for power and display it in right panel
 
 		It is a full screen telemetry window, and is hardcoded to display:
 	
@@ -94,12 +95,12 @@
 
 collectgarbage()
 
-local _version = "2.10"
+local _version = "2.11"
 local _form_version = "1"
 local _appName = ""
 
 --local debugOn = true
-local debugVoltage = 23.65
+local debugVoltage = 6 * 4.2
 local debugCapacity = true
 
 local setupvars = {}
@@ -129,6 +130,8 @@ local countSet = 0
 
 local timerVTable = {}
 local isAlarmActive = {}
+
+local averagingWindowCellVoltage = 5
 
 -- screen variables
 local base_r,base_g,base_b = 0,0,0
@@ -536,7 +539,7 @@ local function printTelemetryWindow()
 
 	if( setupvars.capacitySensor[1] ~= 0 ) then		
 		lcd.drawText(panel_01_R_X + -5,panel_01_R_Y + panel_01_R_Height - lcd.getTextHeight(FONT_MINI,setupvars.trans.lipo)-1,setupvars.trans.lipo,FONT_MINI)
-		lcd.drawText((panel_01_R_X + panel_01_R_Width - lcd.getTextWidth(FONT_MINI,"mAh"))-2,panel_01_R_Y + (panel_01_R_Height - lcd.getTextHeight(FONT_MINI,"mAh"))*0.5,"mAh",FONT_MINI)
+		lcd.drawText((panel_01_R_X + panel_01_R_Width - lcd.getTextWidth(FONT_MINI,"mAh"))-2,panel_01_R_Y + (panel_01_R_Height - lcd.getTextHeight(FONT_MINI,"mAh"))-1,"mAh",FONT_MINI)
 		batteryCapacityUsedString = string.format("%i",setupvars.batteryCapacityUsedTotal)
 		
 		if (hasRxBeenPoweredOn == true and batteryPercentageRounded <= setupvars.alarmCapacityLevelFive and batteryPercentageRounded > setupvars.alarmCapacityLevelSix and batteryCapacityUsedTotal > 0) then
@@ -564,71 +567,105 @@ local function printTelemetryWindow()
 	local panel_02_R_Height = 75
 	local panel_02_R_X = panel_02_L_Width + batterySymbolWidth
 	local panel_02_R_Y = panel_01_R_Height
-	
+
+	local displacement = 2
+	local fontBigHeight = lcd.getTextHeight(FONT_BIG,"0")-displacement
+	local fontNormalHeight = lcd.getTextHeight(FONT_NORMAL,"0")-displacement
+	local fontMiniHeight = lcd.getTextHeight(FONT_MINI,"0")-displacement
+	local font = FONT_NORMAL
+	fontHeight	= lcd.getTextHeight(font,"0") - 1 
+	local xOffset = 50
+	local xOffset1 = 39
+
 	lcd.setColor(base_r,base_g,base_b)
 	lcd.drawFilledRectangle(panel_02_R_X+3,panel_02_R_Y,panel_02_R_Width-3,2)
 	
 	local escCurrentString = ""
 	local escCurrentMaxString = ""
+	local currentSensor_Y = panel_02_R_Y-displacement
 	if( setupvars.currentSensor[1] ~= 0 ) then
-		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5,setupvars.trans.actCurrent,FONT_MINI)
+		lcd.drawText(panel_02_R_X+4,currentSensor_Y+fontHeight-fontMiniHeight-displacement,setupvars.trans.actCurrent,FONT_MINI)
 		escCurrentString = string.format("%3.1f",setupvars.escCurrent)
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escCurrentString)-45,panel_02_R_Y,escCurrentString,FONT_BIG)
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"A")-34,panel_02_R_Y+5,"A",FONT_MINI)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(font,escCurrentString)-xOffset,currentSensor_Y,escCurrentString,font)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"A")-xOffset1,currentSensor_Y+fontHeight-fontMiniHeight-displacement,"A",FONT_MINI)
 		escCurrentMaxString = string.format("%3iA",setupvars.escCurrentMax)
 		if (setupvars.escCurrentMax == -1.0) then
-			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- A")-5,panel_02_R_Y+5,"--- A",FONT_MINI)
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- A")-5,currentSensor_Y+fontHeight-fontMiniHeight-displacement,"--- A",FONT_MINI)
 		else
-			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escCurrentMaxString)-5,panel_02_R_Y+5,escCurrentMaxString,FONT_MINI)
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escCurrentMaxString)-5,currentSensor_Y+fontHeight-fontMiniHeight-displacement,escCurrentMaxString,FONT_MINI)
 		end
 	end
 	lcd.setColor(base_r,base_g,base_b)
 	
+	local powerString = ""
+	local powerMaxString = ""
+	local powerSensor_Y = currentSensor_Y + fontHeight-displacement 
+	if( setupvars.currentSensor[1] ~= 0 and setupvars.voltageSensor[1] ~= 0 ) then
+		lcd.drawText(panel_02_R_X+4,powerSensor_Y+fontHeight-fontMiniHeight-displacement, "Watt",FONT_MINI)
+		powerString = string.format("%i",setupvars.powerValue)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(font,powerString)-xOffset,powerSensor_Y,powerString,font)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"W")-xOffset1,powerSensor_Y+fontHeight-fontMiniHeight-displacement,"W",FONT_MINI)
+		if( setupvars.powerMax >= 1000 ) then 
+			powerMaxString = string.format("%1.2fW", setupvars.powerMax / 1000.0 )
+		else
+			powerMaxString = string.format("%iW",setupvars.powerMax)
+		end
+		if (setupvars.powerMax == -1.0) then
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- W")-5,powerSensor_Y+fontHeight-fontMiniHeight-displacement,"--- W",FONT_MINI)
+		else
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,powerMaxString)-5,powerSensor_Y+fontHeight-fontMiniHeight-displacement,powerMaxString,FONT_MINI)
+		end
+	end
+	lcd.setColor(base_r,base_g,base_b)
+
 	local escTempString = ""
 	local escTempMaxString = ""
+	local escTempSensor_Y = powerSensor_Y + fontHeight-displacement
 	if( setupvars.temperatureSensor[1] ~= 0 ) then
-		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18,setupvars.trans.actTemp,FONT_MINI)
+		lcd.drawText(panel_02_R_X+4,escTempSensor_Y+fontHeight-fontMiniHeight-displacement,setupvars.trans.actTemp,FONT_MINI)
 		escTempString = string.format("%i",setupvars.escTemp)
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escTempString)-45,panel_02_R_Y+0+18,escTempString,FONT_BIG)
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"°C")-34,panel_02_R_Y+5+18,"°C",FONT_MINI)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(font,escTempString)-xOffset,escTempSensor_Y,escTempString,font)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"°C")-xOffset1,escTempSensor_Y+fontHeight-fontMiniHeight-displacement,"°C",FONT_MINI)
 		escTempMaxString = string.format("%i°C",setupvars.escTempMax)
 		if (setupvars.escTempMax == -1.0) then
-			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"---°C")-5,panel_02_R_Y+5+18,"---°C",FONT_MINI)
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"---°C")-5,escTempSensor_Y+fontHeight-fontMiniHeight-displacement,"---°C",FONT_MINI)
 		else
-			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escTempMaxString)-5,panel_02_R_Y+5+18,escTempMaxString,FONT_MINI)
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escTempMaxString)-5,escTempSensor_Y+fontHeight-fontMiniHeight-displacement,escTempMaxString,FONT_MINI)
 		end
 	end
 	lcd.setColor(base_r,base_g,base_b)
 	
 	local escThrottleString = ""
 	local escThrottleMaxString = ""
+	local escThrottleSensor_Y = escTempSensor_Y + fontHeight-displacement
 	if( setupvars.throttleSensor[1] ~= 0 ) then
-		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18,setupvars.trans.actThrottle,FONT_MINI)
+		lcd.drawText(panel_02_R_X+4,escThrottleSensor_Y+fontHeight-fontMiniHeight-displacement,setupvars.trans.actThrottle,FONT_MINI)
 		escThrottleString = string.format("%i",setupvars.escThrottle)
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_BIG,escThrottleString)-45,panel_02_R_Y+0+18+18,escThrottleString,FONT_BIG)
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"%")-34,panel_02_R_Y+5+18+18,"%",FONT_MINI)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(font,escThrottleString)-xOffset,escThrottleSensor_Y,escThrottleString,font)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"%")-xOffset1,escThrottleSensor_Y+fontHeight-fontMiniHeight-displacement,"%",FONT_MINI)
 		escThrottleMaxString = string.format("%i%%",setupvars.escThrottleMax)
 		if (setupvars.escThrottleMax == -1.0) then
-			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- %")-3,panel_02_R_Y+5+18+18,"--- %",FONT_MINI)
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- %")-3,escThrottleSensor_Y+fontHeight-fontMiniHeight-displacement,"--- %",FONT_MINI)
 		else
-			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escThrottleMaxString)-3,panel_02_R_Y+5+18+18,escThrottleMaxString,FONT_MINI)
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,escThrottleMaxString)-3,escThrottleSensor_Y+fontHeight-fontMiniHeight-displacement,escThrottleMaxString,FONT_MINI)
 		end
 	end
 	lcd.setColor(base_r,base_g,base_b)
 
 	local hightString = ""
 	local hightMaxString = ""
+	local hightSensor_Y = escThrottleSensor_Y + fontHeight-displacement
 	if( setupvars.maltiSensor[1] ~= 0 ) then
-		lcd.drawText(panel_02_R_X+4,panel_02_R_Y+5+18+18+18,setupvars.trans.actHeight,FONT_MINI)
+		lcd.drawText(panel_02_R_X+4,hightSensor_Y+fontHeight-fontMiniHeight-displacement,setupvars.trans.actHeight,FONT_MINI)
 		hightString = string.format("%i",setupvars.hight)
-		lcd.drawText(panel_02_R_X+(panel_02_R_Width-lcd.getTextWidth(FONT_BIG,hightString))-45,panel_02_R_Y+0+18+18+18,hightString,FONT_BIG)
-		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"m")-34,panel_02_R_Y+5+18+18+18,"m",FONT_MINI)
+		lcd.drawText(panel_02_R_X+(panel_02_R_Width-lcd.getTextWidth(font,hightString))-xOffset,hightSensor_Y,hightString,font)
+		lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"m")-xOffset1,hightSensor_Y+fontHeight-fontMiniHeight-displacement,"m",FONT_MINI)
 
 		hightMaxString = string.format("%im",setupvars.hightMax)
 		if (setupvars.hightMax == -1.0) then
-			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- m")-3,panel_02_R_Y+5+18+18+18,"--- m",FONT_MINI)
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,"--- m")-3,hightSensor_Y+fontHeight-fontMiniHeight-displacement,"--- m",FONT_MINI)
 		else
-			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,hightMaxString)-3,panel_02_R_Y+5+18+18+18,hightMaxString,FONT_MINI)
+			lcd.drawText(panel_02_R_X+panel_02_R_Width-lcd.getTextWidth(FONT_MINI,hightMaxString)-3,hightSensor_Y+fontHeight-fontMiniHeight-displacement,hightMaxString,FONT_MINI)
 		end
 	end
 	lcd.setColor(base_r,base_g,base_b)
@@ -823,6 +860,7 @@ local function resetTelemetryValues()
 	setupvars.rx_1_Voltage_min = 99.9
 	setupvars.rx_1_Voltage_max = -1.0
 	setupvars.escCurrentMax = -1.0
+	setupvars.powerMax = -1
 	setupvars.escTempMax = -1
 	setupvars.escThrottleMax = -1
 	setupvars.vibrationsMax = -1
@@ -883,6 +921,7 @@ local function initSetupVars()
 	else
 		setupvars.timeCounter = 0
 	end
+	setupvars.powerValue = 0
 end
 
 local function resetActiveTimerAlarms()
@@ -1166,8 +1205,10 @@ local rx_1_Voltage = 0.0
 
 local function updateTelemetrySensors()
 
+	--print( string.format("updateTelemetrySensors Memory used: %i KB", (collectgarbage("count") * 1024)) )
+	
 	if(setupvars.voltageSensor[1] == 999) then
-		print("getTxTelemetry")
+		--print("getTxTelemetry")
 		sensorsRx = system.getTxTelemetry()
 		
 		if (setupvars.voltageSensor[2] == 1) then
@@ -1187,18 +1228,24 @@ local function updateTelemetrySensors()
 			end
 		end
 	end
-		
+
 	currentSensorTable = system.getSensorByID(setupvars.currentSensor[1],setupvars.currentSensor[2])
 	if (currentSensorTable) then
-		setupvars.escCurrent = currentSensorTable.value
 		if( debugOn ) then
 			setupvars.escCurrent = 22.0
+		else
+			setupvars.escCurrent = currentSensorTable.value
 		end
 	end
 	
+	if (currentSensorTable and voltageSensorTable) then
+		setupvars.powerValue = math.floor(setupvars.voltageSensorValue * setupvars.escCurrent)
+		--print( string.format("Power: %i (%fV*%fA)", setupvars.powerValue, setupvars.voltageSensorValue, setupvars.escCurrent) )
+	end
+
 	capacitySensorTable = system.getSensorByID(setupvars.capacitySensor[1],setupvars.capacitySensor[2])
 	if (capacitySensorTable) then
-		if( debugOn and debugCapacity and setupvars.telemetryActive ) then
+		if( debugOn and debugCapacity and setupvars.telemetryActive and flightTimerActive == 1 ) then
 			if( batteryCapacityUsed < setupvars.lipo[2] ) then
 				batteryCapacityUsed = batteryCapacityUsed + 1
 				--print( string.format("batteryCapacityUsed: %d (%d)", batteryCapacityUsed, setupvars.lipo[2]) )
@@ -1210,65 +1257,73 @@ local function updateTelemetrySensors()
 	
 	temperatureSensorTable = system.getSensorByID(setupvars.temperatureSensor[1],setupvars.temperatureSensor[2])
 	if (temperatureSensorTable) then
-		setupvars.escTemp = temperatureSensorTable.value
 		if( debugOn ) then
 			setupvars.escTemp = 22.0
+		else
+			setupvars.escTemp = temperatureSensorTable.value
 		end
 	end
 	
 	throttleSensorTable = system.getSensorByID(setupvars.throttleSensor[1],setupvars.throttleSensor[2])
 	if (throttleSensorTable) then
-		setupvars.escThrottle = throttleSensorTable.value
 		if( debugOn ) then
 			setupvars.escThrottle = 22
+		else
+			setupvars.escThrottle = throttleSensorTable.value
 		end
 	end
 	
 	vibrationsSensorTable = system.getSensorByID(setupvars.vibrationsSensor[1],setupvars.vibrationsSensor[2])
 	if (vibrationsSensorTable) then
-		setupvars.vibrations = vibrationsSensorTable.value
 		if( debugOn ) then
 			setupvars.vibrations = 22
+		else
+			setupvars.vibrations = vibrationsSensorTable.value
 		end
 	end
 	
 	maltiSensorTable = system.getSensorByID(setupvars.maltiSensor[1],setupvars.maltiSensor[2])
 	if (maltiSensorTable) then
-		setupvars.hight = maltiSensorTable.value
 		if( debugOn ) then
 			setupvars.hight = 22
+		else
+			setupvars.hight = maltiSensorTable.value
 		end
 	end
 	
 	rpmSensorTable = system.getSensorByID(setupvars.rpmSensor[1],setupvars.rpmSensor[2])
 	if (rpmSensorTable) then
-		setupvars.rpm = rpmSensorTable.value
 		if( debugOn ) then
 			setupvars.rpm = 2200
+		else
+			setupvars.rpm = rpmSensorTable.value
 		end
 	end
 	
 	elevatorSensorTable = system.getSensorByID(setupvars.elevatorSensor[1],setupvars.elevatorSensor[2])
 	if (elevatorSensorTable) then
-		setupvars.elevatorRate = elevatorSensorTable.value
 		if( debugOn ) then
 			setupvars.elevatorRate = 22
+		else
+			setupvars.elevatorRate = elevatorSensorTable.value
 		end
 	end
 	
 	aileronSensorTable = system.getSensorByID(setupvars.aileronSensor[1],setupvars.aileronSensor[2])
 	if (aileronSensorTable) then
-		setupvars.aileronRate = aileronSensorTable.value
 		if( debugOn ) then
 			setupvars.aileronRate = 22
+		else
+			setupvars.aileronRate = aileronSensorTable.value
 		end
 	end
 	
 	rudderSensorTable = system.getSensorByID(setupvars.rudderSensor[1],setupvars.rudderSensor[2])
 	if (rudderSensorTable) then
-		setupvars.rudderRate = rudderSensorTable.value
 		if( debugOn ) then
 			setupvars.rudderRate = 22
+		else
+			setupvars.rudderRate = rudderSensorTable.value
 		end
 	end
 	
@@ -1336,6 +1391,10 @@ local function updateTelemetrySensors()
 		setupvars.rpmMax = setupvars.rpm
 	end
 	
+	if (setupvars.telemetryActive and setupvars.powerValue > setupvars.powerMax) then
+		setupvars.powerMax = setupvars.powerValue
+	end
+
 	if (setupvars.telemetryActive and setupvars.elevatorRate < setupvars.elevatorRateMin) then
 		setupvars.elevatorRateMin = setupvars.elevatorRate
 	elseif (setupvars.telemetryActive and setupvars.elevatorRate > setupvars.elevatorRateMax) then
@@ -1405,12 +1464,11 @@ local function updateRxValues()
 		setupvars.rx_1_RSSI_A1 = sensorsRx.RSSI[1]
 		setupvars.rx_1_RSSI_A2 = sensorsRx.RSSI[2]
 	end
-	
+
 	if (setupvars.telemetryActive == false and isRxPoweredOn == true) then
 		setupvars.rx_1_Voltage_Averaged = rx_1_Voltage
 	elseif (setupvars.telemetryActive == true) then
 		setupvars.rx_1_Voltage_Averaged = averagingFunctionRxVoltage(rx_1_Voltage)
-		--print( string.format("rx_1_Voltrage_Averaged: %f", setupvars.rx_1_Voltage_Averaged) )
 	end
 
 	if (setupvars.telemetryActive and setupvars.rx_1_Q < setupvars.rx_1_Q_min) then
@@ -1504,6 +1562,11 @@ local function closeForm()
 end
 
 
+-- caclulate power 
+local function calculatePower(index)
+	return setupvars.powerValue, 0
+end
+
 -- Telemetry Window
 local function Window()
 
@@ -1520,10 +1583,11 @@ local function loop()
 	updateRxValues()
 	playVoiceAlarms()
 	playTimerAlarms()
-	if (setupvars.telemetryActive == true) then
-		updateTelemetrySensors()
-	end
+	--if (setupvars.telemetryActive == true) then
+	updateTelemetrySensors()
+	--end
 	
+	--print( string.format("loop Memory used: %i KB", (collectgarbage("count") * 1024)) )
 	collectgarbage()
 end
 
@@ -1591,6 +1655,7 @@ local function init(code)
     if( debugOn ) then
     	setupvars.lipo[1] = 6
     	setupvars.lipo[2] = 1800
+    	setupvars.timeDelay = 4
 		setupvars.voltageSensor     = {34186242,1} 
 		setupvars.currentSensor     = {34186242,2} 
 		setupvars.capacitySensor    = {34186242,4} 
@@ -1609,6 +1674,8 @@ local function init(code)
     initSetupVars()
 
 	resetTelemetryValues()
+
+	system.registerLogVariable("Power", "W", calculatePower )
 
 	system.registerForm(1, MENU_APPS, _appName, setupForm, nil, nil, closeForm)
 
