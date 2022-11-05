@@ -42,8 +42,6 @@ It is a full screen telemetry window, and is changed in some points from Nick Pe
 
 	- seperated setup form into an own lua script (HeliTelm/form.lua)
 
-![Screenshot Main Window](Screen001.png?raw=true "Screenshot Main Window")
-
 ![Screenshot Main Window](Screen002.png?raw=true "Screenshot Main Window")
 
 ![Screenshot Main Window](Screen003.png?raw=true "Screenshot Main Window")
