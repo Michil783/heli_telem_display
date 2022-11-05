@@ -28,7 +28,6 @@ There is a branch (splitApp) were the app is split up into three parts (HeliTelm
 It is a full screen telemetry window, and is changed in some points from Nick Pedersen's original
 
 	- It shows the flight hight if a hight sensor is configured
-	  (shown in the space of the vibrations instead)
 	
 	- it does not show values for sensor not configured
 	  
@@ -36,6 +35,11 @@ It is a full screen telemetry window, and is changed in some points from Nick Pe
 	  (flight time character set size is reduced)
 	  
 	- most of the min/max values are shown in standard color for better readability
+	
+	- showing the current power (and max. power)
+	
+	- own telemetry log value for power
+	  (easier to check in TX build in log viewer)
 	
 	- it supports languages (currently available in english and german)
 	  (please feel free to add additional languages)
