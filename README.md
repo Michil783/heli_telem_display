@@ -6,21 +6,22 @@ Compatible with DS-12, DS-24, DS-14 II, DS-16 II and corresponding DC models. No
 
 By Michael Leopoldseder forked from the excellent work of Nick Pedersen (https://github.com/nickthenorse/heli_telem_display)
 
-	v1.05 - 2022-08-18 - Initial release
-	v1.06 - 2022-08-19 - removed Cell valotage as logging telemetry due to calculated value and not a real value
-	v2.00 - 2022-08-25 - split into more apps to keep it small
-	v2.01 - 2022-08-26 - removed low voltage chirp and introduced count down timer
-	v2.02 - 2022-08-28 - pLoad/pSave optimizations
-	v2.03 - 2022-08-29 - moved functions from Screen to HeliTelm
-	v2.04 - 2022-08-30 - moved a function back to Screen due to higher memory usage in HeliTelm
-	v2.05 - 2022-09-03 - fault corrections
-	v2.06 - 2022-09-06 - get back some PlayVoiceAlarms from Screen and move it to new function PlayTimerAlarms
-	v2.07 - 2022-09-07 - use TimerV.jsn file for countdown alert
-	v2.08 - 2022-10-02 - small optimizations and reintegration of screen.lua (introduced v2.0)
-	v2.09 - 2022-10-16 - error correction for used battery announcement not stored
-	v2.10 - 2022-10-17 - use 100% Lipo capacity instead of 80%
-	v2.11 - 2022-10-18 - add log value for power and display it in right panel
-	
+	V1.05 - 2022-08-18 - Initial release
+	V1.06 - 2022-08-19 - removed Cell valotage as logging telemetry due to calculated value and not a real value
+	V2.00 - 2022-08-25 - split into more apps to keep it small
+	V2.01 - 2022-08-26 - removed low voltage chirp and introduced count down timer
+	V2.02 - 2022-08-28 - pLoad/pSave optimizations
+	V2.03 - 2022-08-29 - moved functions from Screen to HeliTelm
+	V2.04 - 2022-08-30 - moved a function back to Screen due to higher memory usage in HeliTelm
+	V2.05 - 2022-09-03 - fault corrections
+	V2.06 - 2022-09-06 - get back some PlayVoiceAlarms from Screen and move it to new function PlayTimerAlarms
+	V2.07 - 2022-09-07 - use TimerV.jsn file for countdown alert
+	V2.08 - 2022-10-02 - small optimizations and reintegration of screen.lua (introduced v2.0)
+	V2.09 - 2022-10-16 - error correction for used battery announcement not stored
+	V2.10 - 2022-10-17 - use 100% Lipo capacity instead of 80%
+	V2.11 - 2022-10-18 - add log value for power and display it in right panel
+	V2.20 - 2024-08-18 - add RPM smoothing
+
 Instructions: download the file HeliTelm.lua as well as the folder Lang and HeliTelm and copy it to the /Apps folder on your Jeti transmitter. Then install via "User Applications" submenu.
 
 There is a branch (splitApp) were the app is split up into three parts (HeliTelm, Screen and Form app). Goal is to balance memory usage to achieve DS-16 compatibility.
