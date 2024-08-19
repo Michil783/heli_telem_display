@@ -12,10 +12,11 @@
 	4 - 2022-08-30 - 
 	5 - 2022-09-07 - remove time end sound
 	6 - 2022-10-16 - error correction for used battery announcement not stored
-	
+	7 - 2024-08-18 - add rpm smoothing
+
 --------------------------------------------------------------------------------------------]]
 
-local _version = 6
+local _version = 7
 
 local setupvars = {}
 local sensorsAvailable = {}
@@ -71,6 +72,16 @@ local function rpmSensorChanged(value)
 	setupvars.rpmSensor[1] = sensorsAvailable[value].id
 	setupvars.rpmSensor[2] = sensorsAvailable[value].param
 	system.pSave("rpmSensor",setupvars.rpmSensor)
+end
+
+local function rpmDivisorChanged(value)
+	setupvars.rpmDivisor = value
+	system.pSave("rpmDivisor",setupvars.rpmDivisor)
+end
+
+local function rpmSmoothingChanged(value)
+	setupvars.rpmSmoothing = value
+	system.pSave("rpmSmoothing",setupvars.rpmSmoothing)
 end
 
 local function vibrationsSensorChanged(value)
@@ -320,6 +331,14 @@ local function initForm(vars)
 	form.addSelectbox(selectionList,rpmCurrentIndex, true, rpmSensorChanged)
 	
 	form.addRow(2)
+	form.addLabel({label=setupvars.trans.rpmdivisor,font=FONT_NORMAL,width=200})
+	form.addIntbox(setupvars.rpmDivisor,10,1000,10,1,1,rpmDivisorChanged)
+
+	form.addRow(2)
+	form.addLabel({label=setupvars.trans.rpmsmoothing,font=FONT_NORMAL,width=200})
+	form.addIntbox(setupvars.rpmSmoothing,0,20,0,0,1,rpmSmoothingChanged)
+
+	form.addRow(2)
 	form.addLabel({label=setupvars.trans.height,font=FONT_NORMAL,width=170})
 	form.addSelectbox(selectionList,maltiCurrentIndex, true, maltiSensorChanged)
 	
@@ -344,7 +363,7 @@ local function initForm(vars)
 	
 	form.addRow(2)
 	form.addLabel({label=setupvars.trans.cellCount,font=FONT_NORMAL,width=200})
-	form.addIntbox(setupvars.lipo[1],1,99,1,0,1,lipoCellCountChanged)
+	form.addIntbox(setupvars.lipo[1],1,12,1,0,1,lipoCellCountChanged)
 	
 	form.addRow(2)
 	form.addLabel({label=setupvars.trans.nominalCapacity,font=FONT_NORMAL,width=210})
