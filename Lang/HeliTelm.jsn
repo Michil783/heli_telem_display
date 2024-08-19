@@ -67,7 +67,9 @@
     "usedBattery4":"",
     "fbl":"FBL",
     "capacityUnit":"Capacity",
-    "timerEndFile":"Timer end voice file"
+    "timerEndFile":"Timer end voice file",
+    "rpmsmoothing":"RPM smoothing",
+    "rpmdivisor":"RPM divisor"
   },
   "de":{
     "sensors":"Telemetrie Sensoren Auswahl",
@@ -136,6 +138,8 @@
     "usedBattery4":"geladen",
     "fbl":"FBL",
     "capacityUnit":"Kapazit",
-    "timerEndFile":"Timer Ende Ansage"
+    "timerEndFile":"Timer Ende Ansage",
+    "rpmsmoothing":"RPM Glättung",
+    "rpmdivisor":"RPM Teiler"
   }
 }
