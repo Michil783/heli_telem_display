@@ -10,23 +10,24 @@
 
 	Starting from here by Michael Leopoldseder
 
-	v1.03 - 2022-08-13 - changes some colors and telemetry sensors 
-	v1.04 - 2022-08-17 - adding flight counter 
-	v1.05 - 2022-08-18 - changing Telemetry window name and adding language support
-	v1.06 - 2022-08-19 - removed Cell valotage as logging telemetry due to calculated value and not a real value
-	v2.00 - 2022-08-25 - split into more apps to keep it smal
-	v2.01 - 2022-08-26 - removed low voltage chirp and introduced count down timer
-	v2.02 - 2022-08-28 - pLoad/pSave optimizatiuons
-	v2.03 - 2022-08-29 - moved functions from Screen to HeliTelm
-	v2.04 - 2022-08-30 - moved a function back to Screen due to higher memory usage in HeliTelm
-	v2.05 - 2022-09-03 - fault corrections
-	v2.06 - 2022-09-06 - get back some PlayVoiceAlarms from Screen and move it to new function PlayTimerAlarms
-	v2.07 - 2022-09-07 - use TimerV.jsn file for countdown alert
-	v2.08 - 2022-10-02 - small optimizations and reintegration of screen.lua
-	v2.09 - 2022-10-16 - error correction for used battery announcement not stored
-	v2.10 - 2022-10-17 - use 100% Lipo capacity instead of 80%
-	v2.11 - 2022-10-18 - add log value for power and display it in right panel
-
+	V1.03 - 2022-08-13 - changes some colors and telemetry sensors 
+	V1.04 - 2022-08-17 - adding flight counter 
+	V1.05 - 2022-08-18 - changing Telemetry window name and adding language support
+	V1.06 - 2022-08-19 - removed Cell valotage as logging telemetry due to calculated value and not a real value
+	V2.00 - 2022-08-25 - split into more apps to keep it smal
+	V2.01 - 2022-08-26 - removed low voltage chirp and introduced count down timer
+	V2.02 - 2022-08-28 - pLoad/pSave optimizatiuons
+	V2.03 - 2022-08-29 - moved functions from Screen to HeliTelm
+	V2.04 - 2022-08-30 - moved a function back to Screen due to higher memory usage in HeliTelm
+	V2.05 - 2022-09-03 - fault corrections
+	V2.06 - 2022-09-06 - get back some PlayVoiceAlarms from Screen and move it to new function PlayTimerAlarms
+	V2.07 - 2022-09-07 - use TimerV.jsn file for countdown alert
+	V2.08 - 2022-10-02 - small optimizations and reintegration of screen.lua
+	V2.09 - 2022-10-16 - error correction for used battery announcement not stored
+	V2.10 - 2022-10-17 - use 100% Lipo capacity instead of 80%
+	V2.11 - 2022-10-18 - add log value for power and display it in right panel
+	V2.20 - 2024-08-18 - add RPM smoothing
+		
 		It is a full screen telemetry window, and is hardcoded to display:
 	
 		- A flight timer (counts upwards only).
@@ -95,7 +96,7 @@
 
 collectgarbage()
 
-local _version = "2.11"
+local _version = "2.20"
 local _form_version = "1"
 local _appName = ""
 
@@ -865,6 +866,7 @@ local function resetTelemetryValues()
 	setupvars.escThrottleMax = -1
 	setupvars.vibrationsMax = -1
 	setupvars.hightMax = -1
+	setupvars.rpm = 0
 	setupvars.rpmMax = -1
 	setupvars.elevatorRateMin = 1e6
 	setupvars.elevatorRateMax = -1e6
@@ -1202,6 +1204,7 @@ local rudderSensorTable = {}
 
 local sensorsRx = {}
 local rx_1_Voltage = 0.0
+local rpmArray = {}
 
 local function updateTelemetrySensors()
 
@@ -1293,10 +1296,35 @@ local function updateTelemetrySensors()
 	
 	rpmSensorTable = system.getSensorByID(setupvars.rpmSensor[1],setupvars.rpmSensor[2])
 	if (rpmSensorTable) then
-		if( debugOn ) then
-			setupvars.rpm = 2200
+		if( setupvars.rpmSmoothing > 1 ) then
+			if( #rpmArray == setupvars.rpmSmoothing ) then
+				print("array full: ", #rpmArray)
+				for i=1, #rpmArray-1, 1 do
+					print("array index: ", i)
+					rpmArray[i] = rpmArray[i+1]
+				end
+				table.remove(rpmArray, setupvars.rpmSmoothing)
+			end
+			if( debugOn ) then
+				table.insert(rpmArray, math.random(2000,3000))
+			else
+				table.insert(rpmArray, rpmSensorTable.value)
+			end
+			local rpmMean = 0
+			for i=1, #rpmArray, 1 do
+				rpmMean = rpmMean + rpmArray[i]
+			end
+			rpmMean = rpmMean / #rpmArray
+			setupvars.rpm = rpmMean
 		else
-			setupvars.rpm = rpmSensorTable.value
+			if( debugOn ) then
+				setupvars.rpm = math.random(2000,3000)
+			else
+				setupvars.rpm = rpmSensorTable.value
+			end
+		end
+		if( setupvars.rpmDivisor > 10 ) then
+			setupvars.rpm = setupvars.rpm / (setupvars.rpmDivisor / 10)
 		end
 	end
 	
@@ -1638,6 +1666,9 @@ local function init(code)
 	setupvars.aileronSensor     = system.pLoad("aileronSensor",{0,0})
 	setupvars.rudderSensor      = system.pLoad("rudderSensor",{0,0})
 
+	setupvars.rpmSmoothing      = system.pLoad("rpmSmoothing",0)
+	setupvars.rpmDivisor        = system.pLoad("rpmDivisor",10)
+
 	setupvars.lipo              = system.pLoad("lipo",{1,0})
 
 	setupvars.timeDelay = system.pLoad("timeDelay",10)
@@ -1662,6 +1693,7 @@ local function init(code)
 		setupvars.temperatureSensor = {34186242,9} 
 		setupvars.throttleSensor    = {34186242,8} 
 		setupvars.rpmSensor         = {34186242,3}
+		setupvars.rpmSmoothing      = 0
 		setupvars.vibrationsSensor  = {34186242,8}
 		setupvars.maltiSensor       = {34186242,8}
 		setupvars.elevatorSensor    = {34186242,8}
